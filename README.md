@@ -63,9 +63,12 @@ and joins the game in progress (free play until the field is empty, then the loo
 
 ### Modes
 
-The **MODE** row has one toggle per game mode, saved in settings.json. **Blitz** is the
-only mode so far. **Sprint** and **VOD Review** are there but greyed out ("coming soon"
-tooltip) until they are built.
+The **MODE** row has one toggle per game mode, saved in settings.json. Switching while
+running restarts the session in the new mode.
+
+* **Blitz:** the perfect-clear loop above (bot plays or advisor).
+* **Sprint:** 6-3 stacking advice for 40 lines. See [Sprint (6-3 stacking)](#sprint-6-3-stacking).
+* **VOD Review:** greyed out ("coming soon" tooltip) until it is built.
 
 Options (`./run_bot.command --help`):
 
@@ -129,6 +132,36 @@ which one is most likely.
 
 The ranking of candidates is: the one already shown, then openers you switched on, then the
 prior, then the published PC chance.
+
+## Sprint (6-3 stacking)
+
+Pick **Sprint** in the MODE row and press ⌘⇧K. You play 40 lines; the bot watches and shows
+where each piece should go for [6-3 stacking](https://harddrop.com/wiki/Tetris_stacking):
+the well is **column 7**, with a 6-wide stack on its left and a 3-wide stack on its right.
+Every I goes down the well for a tetris. Sprint is advice only (BOT PLAYS is greyed out).
+
+**The panel:** in Sprint, the Solve and Next panels are replaced by one taller translucent
+panel. It shows your board (grey), the well (shaded column), the piece in play where it
+should go (in colour, outlined in white) and the next 2 pieces of the plan (dimmed,
+numbered 2 and 3). The plan stops at the first line clear, because the rows move after that.
+The title counts the lines left; the line under it says how many rows are ready for a
+tetris. The main panel shows lines/40, tetrises, pps and `next: hold I, place T`.
+
+**How it picks a spot** (`tetrisbot/sprint.py`): it searches the piece in play (with
+hold, real key paths) and the next 2 pieces, keeping the 10 best boards at each step, and
+scores them by these rules:
+
+* never cover the well, never make holes
+* flat but not perfectly flat: every piece (S and Z most of all, then O) must keep a place
+  where it fits without a hole and without touching the well
+* no column more than 2 deep other than the well (it would need an I)
+* keep the 3-wide side level with the 6-wide side; build up to 4 ready rows
+* I: tetris once 4 rows are ready. Otherwise hold it ("keep an I in reserve") or lay it
+  flat; never burn it in the well for fewer lines
+* no soft drops and the fewest key presses (your Handling settings)
+
+In simulation, following every suggestion clears 40 lines in about 106 pieces (100 is the
+minimum) with 10 tetrises, 2.95 key presses per piece and almost no soft drops (20 games).
 
 ## Handling window
 
@@ -412,6 +445,7 @@ the same setups flipped (e.g. JO appears as LO), and the bot logs whichever orie
 | `tetrisbot/controller.py` | live loop: read screen → decide → press keys → verify → resync if needed |
 | `tetrisbot/app.py`, `hotkey.py`, `keys.py` | overlay panel, global ⌘⇧K, synthetic key presses |
 | `tetrisbot/coach.py` | advisor: Watcher (screen frames → "piece spawned" / "piece locked" events) and Coach (recognises the setup, keeps a Brain in step with the user's game) |
+| `tetrisbot/sprint.py` | Sprint mode: 6-3 stacking rules, the short plan search, and SprintCoach (follows the user's game through the same Watcher) |
 | `tetrisbot/model.py`, `model/setup_prior.json` | the advisor's learned setup prior and its self-play training |
 | `tetrisbot/sim.py`, `tests/` | headless simulator and tests (including a fake TETR.IO screen) |
 

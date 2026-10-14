@@ -104,10 +104,19 @@ class Bot:
 
     # ------------------------------------------------------------- control
     def set_handling(self, h):
-        """Apply new handling settings (safe to call while running)."""
+        """Apply new handling settings (safe to call while running). A new game mode
+        restarts a running session in that mode."""
+        mode_changed = h.mode != getattr(self, "h", h).mode
         self.h = h
         self.kb.h = h
         planner.configure(h, safe=(h.gravity == "HIGH") or (planner.SETTINGS["safe"] and h.gravity == "AUTO"))
+        if mode_changed:
+            self.log(f"[mode] {h.mode.lower()}")
+            self._restart()
+
+    def sprint(self):
+        """Sprint mode: 6-3 stacking advice. The user always plays (no BOT PLAYS)."""
+        return self.h.mode == "SPRINT"
 
     def log(self, msg):
         self.last_msg = msg
@@ -140,6 +149,9 @@ class Bot:
             return
         self.autoplay = on
         self.log(f"[mode] {'bot plays' if on else 'advisor: you play, the bot suggests'}")
+        self._restart()
+
+    def _restart(self):
         if self.running():
             old = self.thread
 
@@ -150,7 +162,11 @@ class Bot:
             threading.Thread(target=restart, daemon=True).start()
 
     def status(self):
-        if not self.autoplay and self.coach is not None:
+        from .sprint import SprintCoach
+        if isinstance(self.coach, SprintCoach):
+            if self.sprint():
+                return self._sprint_status()
+        elif not self.autoplay and self.coach is not None and not self.sprint():
             return self._coach_status()
         pps = 0.0
         if self.t_start and self.pieces:
@@ -175,6 +191,17 @@ class Bot:
             "pcs": st.get("pc", 0), "tspins": sum(v for k, v in st.items() if k.startswith("tspin")),
             "msg": self.last_msg, "safe": False, "fixes": 0, "lag_ms": 0.0, "grav": 0.0,
             "display": br.display, "bag": getattr(br, "bag_view", None), "next": self.lookahead.display,
+            "advice": c.advice(), "followed": c.followed, "suggested": c.suggested,
+        }
+
+    def _sprint_status(self):
+        c = self.coach
+        pps = c.pieces / max(1e-6, time.time() - self.t_start) if self.t_start and c.pieces else 0.0
+        return {
+            "state": self.state, "stage": "6-3", "pieces": c.pieces, "pps": pps, "pcs": 0, "tspins": 0,
+            "msg": self.last_msg, "safe": False, "fixes": 0, "lag_ms": 0.0, "grav": 0.0,
+            "display": c.display, "bag": None, "next": None, "sprint": True,
+            "lines": c.lines, "tetrises": c.tetrises,
             "advice": c.advice(), "followed": c.followed, "suggested": c.suggested,
         }
 
@@ -211,7 +238,7 @@ class Bot:
                         break
                     continue
                 self.log(f"Board found: {self.geo}")
-                if self.autoplay:
+                if self.autoplay and not self.sprint():
                     self._play_one_game()
                 else:
                     self._watch_game()
@@ -227,9 +254,13 @@ class Bot:
         """Advisor mode: follow the user's game until stopped (new games are picked up
         automatically). No keys are pressed."""
         from .coach import Coach, Watcher
+        from .sprint import SprintCoach
         self.state = "watching"
         self.lookahead.reset()
-        self.coach = Coach(log=self.log, lookahead=self.lookahead, prior=self.prior, threaded=True)
+        if self.sprint():
+            self.coach = SprintCoach(log=self.log, threaded=True)
+        else:
+            self.coach = Coach(log=self.log, lookahead=self.lookahead, prior=self.prior, threaded=True)
         w = Watcher(self.coach, self.log)
         self.t_start = time.time()
         missing = 0

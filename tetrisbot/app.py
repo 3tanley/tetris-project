@@ -12,7 +12,7 @@ from .controller import Bot, screen_access_ok
 from .keys import accessibility_ok
 
 W, H = 270, 282
-MODES = [("BLITZ", "Blitz", True), ("SPRINT", "Sprint", False), ("VOD", "VOD Review", False)]   # (key, label, ready)
+MODES = [("BLITZ", "Blitz", True), ("SPRINT", "Sprint", True), ("VOD", "VOD Review", False)]   # (key, label, ready)
 SOLVE_H = 250
 
 # four.lol colours
@@ -26,7 +26,8 @@ def _c(rgb, a=1.0):
 
 class DiagramView(AppKit.NSView):
     """Draws a setup / solution diagram: rows top->bottom, letters = pieces,
-    lowercase = already placed (dimmed), G = earlier stack, X = DPC leftover."""
+    lowercase = already placed (dimmed), G = earlier stack, X = DPC leftover.
+    Optional: `hint` cells outlined, `labels` [(row, col, text)], `well` column shaded."""
 
     def isFlipped(self):
         return True
@@ -42,6 +43,10 @@ class DiagramView(AppKit.NSView):
         y0 = b.size.height - n * cell - 2
         _c((0, 0, 0), 0.35).setFill()
         AppKit.NSBezierPath.fillRect_(AppKit.NSMakeRect(x0, y0, 10 * cell, n * cell))
+        well = getattr(self, "well", None)
+        if well is not None:                    # sprint: the tetris well
+            _c((255, 255, 255), 0.08).setFill()
+            AppKit.NSBezierPath.fillRect_(AppKit.NSMakeRect(x0 + well * cell, y0, cell, n * cell))
         for j, row in enumerate(rows):
             for i, ch in enumerate(row):
                 if ch == ".":
@@ -63,6 +68,12 @@ class DiagramView(AppKit.NSView):
                 AppKit.NSMakeRect(x0 + i * cell + 1.5, y0 + j * cell + 1.5, cell - 3, cell - 3))
             path.setLineWidth_(2)
             path.stroke()
+        # piece order of the planned pieces after the one in play
+        for j, i, text in getattr(self, "labels", None) or []:
+            AppKit.NSAttributedString.alloc().initWithString_attributes_(text, {
+                AppKit.NSFontAttributeName: AppKit.NSFont.boldSystemFontOfSize_(max(8.0, cell * 0.6)),
+                AppKit.NSForegroundColorAttributeName: AppKit.NSColor.whiteColor(),
+            }).drawAtPoint_((x0 + i * cell + cell * 0.28, y0 + j * cell + cell * 0.1))
 
 
 class BagView(AppKit.NSView):
@@ -168,11 +179,15 @@ class SolvePanel(NSObject):
             self.sub.setStringValue_(getattr(self, "empty_sub", "waiting for a game"))
             self.diagram.rows = []
             self.diagram.hint = []
+            self.diagram.labels = []
+            self.diagram.well = None
         else:
             self.title.setStringValue_(display["title"])
             self.sub.setStringValue_(display["sub"])
             self.diagram.rows = display["rows"]
             self.diagram.hint = display.get("hint") or []
+            self.diagram.labels = display.get("labels") or []
+            self.diagram.well = display.get("well")
         self.diagram.setNeedsDisplay_(True)
 
 
@@ -307,6 +322,14 @@ class Overlay(NSObject):
         self.next.empty_sub = "planned ahead during T-spin setups"
         self.next.shown = 0
         self.next.update(None)
+        # Sprint: one panel in place of Solve + Next, showing where the pieces go
+        self.sprint = SolvePanel.alloc().initWithFrame_(
+            AppKit.NSMakeRect(rect.origin.x, rect.origin.y - 2 * SOLVE_H - 16, W, 2 * SOLVE_H + 8))
+        self.sprint.empty_title = "Sprint 6-3"
+        self.sprint.empty_sub = "you play; the panel shows where each piece goes"
+        self.sprint.shown = 0
+        self.sprint.update(None)
+        self._show_panels()
         NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(0.15, self, "tick:", None, True)
 
     def toggle_(self, sender):
@@ -323,7 +346,20 @@ class Overlay(NSObject):
     @objc.python_method
     def _show_autoplay(self):
         on = self.autoplay.state() == AppKit.NSControlStateValueOn
-        self.autoplay_note.setStringValue_("on: bot presses keys" if on else "off: suggestions only")
+        sprint = self.bot.sprint()
+        self.autoplay.setEnabled_(not sprint)
+        self.autoplay_note.setStringValue_("sprint: advice only" if sprint else
+                                           "on: bot presses keys" if on else "off: suggestions only")
+
+    @objc.python_method
+    def _show_panels(self):
+        """Blitz: Solve + Next panels. Sprint: the one Sprint panel."""
+        sprint = self.bot.sprint()
+        for panel, show in ((self.solve, not sprint), (self.next, not sprint), (self.sprint, sprint)):
+            if show:
+                panel.panel.orderFrontRegardless()
+            else:
+                panel.panel.orderOut_(None)
 
     def mode_(self, sender):
         key, label, ready = MODES[sender.selectedSegment()]
@@ -334,6 +370,8 @@ class Overlay(NSObject):
         h = replace(self.bot.h, mode=key)
         h.save()
         self.bot.set_handling(h)
+        self._show_autoplay()
+        self._show_panels()
 
     def handling_(self, sender):
         if getattr(self, "hwin", None) is None:
@@ -355,7 +393,15 @@ class Overlay(NSObject):
         s = self.bot.status()
         running = self.bot.running()
         self.button.setTitle_("Stop" if running else "Start")
-        if "advice" in s:                   # advisor: the user plays
+        if s.get("sprint"):                 # sprint: 6-3 advice
+            lines = [
+                f"{s['state']}  ·  6-3 stacking",
+                f"lines {s['lines']}/40   pieces {s['pieces']}   {s['pps']:.2f} pps",
+                f"tetrises {s['tetrises']}   followed {s['followed']}/{s['suggested']}",
+                s["advice"][:48],
+                (s["msg"] or "")[:48],
+            ]
+        elif "advice" in s:                 # advisor: the user plays
             lines = [
                 f"{s['state']}  ·  {s['stage']}",
                 f"pieces {s['pieces']}   {s['pps']:.2f} pps   PCs {s['pcs']}",
@@ -372,8 +418,11 @@ class Overlay(NSObject):
                 (s["msg"] or "")[:48],
             ]
         self.status.setStringValue_("\n".join(lines))
-        self.solve.update(s.get("display"))
-        self.next.update(s.get("next"))
+        if self.bot.sprint():
+            self.sprint.update(s.get("display") if s.get("sprint") else None)
+        else:
+            self.solve.update(s.get("display"))
+            self.next.update(s.get("next"))
         if s.get("bag") != self.bagview.info:
             self.bagview.info = s.get("bag")
             self.bagview.setNeedsDisplay_(True)

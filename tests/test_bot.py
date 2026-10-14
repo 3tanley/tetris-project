@@ -1195,3 +1195,98 @@ def test_jaws_is_the_fourlol_ilsz_data():
         build = sorted(t.slots[s].ptype for s in t.slots if s.startswith("b"))
         assert build == ["I", "L", "S", "Z"] and len(t.slots) == 10, t.name
         assert templates.residue(t).rows[0] == 0, t.name
+
+
+# ------------------------------------------------------------------ sprint (6-3)
+def test_sprint_63_advice_scores_tetrises():
+    # following the advice: 40 lines almost only by tetrises, well (column 7) kept open,
+    # no soft drops, no holes outside the well
+    from tetrisbot import sprint
+    for seed in (1, 4):
+        g = sim.Game(seed)
+        n = tetrises = soft = 0
+        while g.lines < 40:
+            st = sprint.plan(g.board, g.current, g.hold, g.visible())[0][0]
+            soft += core.SOFT in st.keys()
+            _, cleared, _, _ = g.apply(st)
+            n += 1
+            tetrises += len(cleared) == 4
+            hs = g.board.col_heights()
+            if st.pl.piece != "I":
+                assert hs[sprint.WELL] == 0, f"seed {seed} piece {n}: well covered\n{g.board}"
+        assert tetrises >= 9 and n <= 115 and soft <= 2, (seed, n, tetrises, soft)
+
+
+def test_sprint_tetris_when_ready_and_i_not_burnt():
+    from tetrisbot import sprint
+    ready = core.Board.from_strings(["######.###"] * 4)
+    st, _, lines = sprint.plan(ready, "I", None, list("TLJOS"))[0]
+    assert lines == 4 and all(x == sprint.WELL for x, _ in st.pl.cells)
+    # only 2 rows ready: the I is held (kept in reserve), not burnt in the well
+    low = core.Board.from_strings(["######.###"] * 2)
+    st, _, lines = sprint.plan(low, "I", None, list("TLJOS"))[0]
+    assert lines == 0 and not any(x == sprint.WELL for x, _ in st.pl.cells)
+
+
+def test_sprint_display_marks_piece_in_play_and_order():
+    from tetrisbot import sprint
+    b = core.Board.from_strings(["###...####"])
+    steps = sprint.plan(b, "T", None, list("OLJSZ"))
+    d = sprint.display(b, steps, 0)
+    assert d["well"] == sprint.WELL and d["title"].endswith("40 lines to go")
+    n = len(d["rows"])
+    for j, i in d["hint"]:                      # outlined = the piece in play, in colour
+        assert d["rows"][j][i] == steps[0][0].pl.piece
+    assert len(d["hint"]) == 4
+    assert [t for _, _, t in d["labels"]] == [str(k + 2) for k in range(len(d["labels"]))]
+    assert all(row[i] == "G" for i in range(3) for row in d["rows"][n - 1:])
+
+
+def test_sprint_coach_follows_the_screen():
+    # the user plays the advice on the fake TETR.IO screen; the sprint coach counts every
+    # lock, line and tetris through the same Watcher as the Blitz advisor
+    from fakegame import FakeTetrio
+    from tetrisbot import sprint
+    from tetrisbot.coach import Watcher
+
+    planner.configure(safe=False, gravity_rps=0)
+    fake = FakeTetrio(seed=3, banner_s=0.3, clear_delay_ms=150, latency_ms=40)
+    geo = vision.locate(fake.full())
+    box = geo.bounds()
+    lgeo = vision.Geometry(geo.left - box[0], geo.top - box[1], geo.cw, geo.ch)
+    logs = []
+    coach = sprint.SprintCoach(log=logs.append)
+    w = Watcher(coach, logs.append)
+    g = fake.game
+    lines = 0
+    for _ in range(30):
+        w.poll(fake.grab(box), lgeo)
+        step = sprint.plan(g.board, g.current, g.hold, g.visible())[0][0]
+        lines += len(g.board.copy().place_cells(step.pl.cells))
+        for k in step.keys():
+            fake.press(k)
+            w.poll(fake.grab(box), lgeo)
+        t = time.time()
+        while time.time() - t < 0.2:
+            w.poll(fake.grab(box), lgeo)
+            time.sleep(0.01)
+    assert coach.pieces == fake.pieces == 30, logs
+    assert not any("re-reading" in m for m in logs), logs
+    assert coach.followed == coach.suggested == 30
+    assert coach.lines == lines and coach.tetrises >= 1
+
+
+def test_sprint_mode_switch_uses_sprint_coach():
+    from dataclasses import replace
+    from tetrisbot.controller import Bot
+    from tetrisbot.handling import Handling
+    from tetrisbot.sprint import SprintCoach
+    bot = Bot(log=lambda *a: None, handling=Handling(mode="BLITZ"))
+    bot.autoplay = True
+    bot.set_handling(replace(bot.h, mode="SPRINT"))
+    assert bot.sprint()
+    bot.coach = SprintCoach(log=lambda *a: None)
+    s = bot.status()
+    assert s["sprint"] and s["lines"] == 0 and s["advice"] == "waiting for a game"
+    bot.set_handling(replace(bot.h, mode="BLITZ"))
+    assert "sprint" not in bot.status()

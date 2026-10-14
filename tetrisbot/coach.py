@@ -76,22 +76,13 @@ def _plan_still_works(board, plan):
     return b.rows[0] == 0
 
 
-class Coach:
-    """Follows the user's game. The public methods can be called from the screen thread;
-    with threaded=True the planning runs on a worker thread so a slow perfect-clear search
-    never makes the watcher miss a piece."""
+class Events:
+    """The Watcher's events (begin / spawned / locked). They can be called from the screen
+    thread; with threaded=True the handlers run on a worker thread so slow planning never
+    makes the watcher miss a piece."""
 
-    def __init__(self, log=print, lookahead=None, prior=None, threaded=False):
+    def __init__(self, log=print, threaded=False):
         self.log = log
-        self.lookahead = lookahead
-        self.prior = prior if prior is not None else SetupPrior.load()
-        self.brain = Brain(log=log, lookahead=lookahead)
-        self.spawn = None          # (current, hold, queue) when the piece in play spawned
-        self.rec = None            # the suggested Step for the piece in play
-        self.suggested = 0         # pieces with a suggestion
-        self.followed = 0          # ...that the user placed exactly there
-        self.pieces = 0
-        self.fits = 0              # setups that still fit what the user has built
         self.threaded = threaded
         self._q = _queue.Queue()
         self._closed = False
@@ -135,6 +126,22 @@ class Coach:
                 self.log(f"[coach] error: {e}")
             finally:
                 self._q.task_done()
+
+
+class Coach(Events):
+    """Follows the user's Blitz game (setups, PCs, DPC)."""
+
+    def __init__(self, log=print, lookahead=None, prior=None, threaded=False):
+        self.lookahead = lookahead
+        self.prior = prior if prior is not None else SetupPrior.load()
+        self.brain = Brain(log=log, lookahead=lookahead)
+        self.spawn = None          # (current, hold, queue) when the piece in play spawned
+        self.rec = None            # the suggested Step for the piece in play
+        self.suggested = 0         # pieces with a suggestion
+        self.followed = 0          # ...that the user placed exactly there
+        self.pieces = 0
+        self.fits = 0              # setups that still fit what the user has built
+        super().__init__(log, threaded)
 
     # ------------------------------------------------------------ handlers
     def _begin(self, board, cur, hold, queue, fresh):
