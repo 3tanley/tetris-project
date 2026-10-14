@@ -17,7 +17,7 @@ Mirrors are generated in code.
 """
 
 BAG1 = [
-    ("Jigsaw-Jaws", "Jigsaw bag 1, Jaws variant (hold T; bag order Z > T)", [
+    ("Jigsaw-Jaws", "Jigsaw bag 1, 6-piece build (the wiki's Jaws-shaped variant, not the 4-piece Jaws opener; hold T; bag order Z > T)", [
         "I L L L . . . . . .",
         "I L Z . . . . . . .",
         "I Z Z S S O O J J J",

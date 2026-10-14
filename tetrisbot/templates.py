@@ -356,26 +356,45 @@ def _pc2_templates():
 
 
 def _jaws_templates():
-    """Jaws 1st PC: the I L S Z build + one wiki solution each, as one 10-piece template
-    (an O, T or J that comes early can go straight to its spot in the solution)."""
+    """Jaws 1st PC (four.lol ILSZ): the 4-piece I L S Z build + one solution each, as one
+    10-piece template (an O, T or J that comes early can go straight to its spot in the
+    solution). Build slots are named b<piece>; the O / J of the ILOSZ / ILJOSZ fields are
+    v<piece>: they belong to the solution, so the build stays 4 pieces."""
     build = [r.split() for r in JAWS.BUILD]
     out = []
-    for i, sol in enumerate(JAWS.SOLUTIONS):
-        rows = []
-        for brow, srow in zip(build, (r.split() for r in sol)):
-            rows.append([("b" + b if s == "G" else (None if s == "." else s)) for b, s in zip(brow, srow)])
-        typ = {"j": "J", "t": "T"}
+    for kind, field_code, sol_code in (("", None, JAWS.SOLUTIONS_ILSZ),
+                                       ("ILOSZ", JAWS.FIELD_ILOSZ, JAWS.SOLUTIONS_ILOSZ),
+                                       ("ILJOSZ", JAWS.FIELD_ILJOSZ, JAWS.SOLUTIONS_ILJOSZ)):
+        field = [list(r) for r in fumen.decode(field_code)[0].rows(with_op=True)] if field_code else \
+            [[c if c != "." else "." for c in r] for r in build]
+        full = [y for y, r in enumerate(field) if "." not in r]          # rows four.lol drew cleared
+        for n, page in enumerate(fumen.decode(sol_code)):
+            sol = [list(r) for r in page.rows(with_op=True)]
+            for y in full:
+                sol.insert(y, ["X"] * 10)
+            rows = []
+            for y, (frow, srow) in enumerate(zip(field, sol)):
+                row = []
+                for x, (f, c) in enumerate(zip(frow, srow)):
+                    if c == "X":
+                        row.append(("b" if build[y][x] != "." else "v") + f)
+                    else:
+                        row.append(None if c == "." else c)
+                rows.append(row)
 
-        def type_of(tok):
-            if tok.startswith("b"):
-                return [tok[1]], False
-            p = typ.get(tok, tok)
-            return [p], p == "T"
+            def type_of(tok):
+                if tok[0] in "bv":
+                    return [tok[1]], False
+                return [tok], tok == "T"
 
-        t = _build(f"Jaws-{i + 1}", "JAWS", "pc1_pc", rows, f"Jaws (ILSZ) 1st PC, solution {i + 1}",
-                   type_of, split_ok=True)
-        t.label = f"Jaws #{i + 1}"
-        out.append(t)
+            name = f"Jaws{'-' + kind if kind else ''}-{n + 1}"
+            try:
+                t = _build(name, "JAWS", "pc1_pc", rows,
+                           f"Jaws {kind or 'ILSZ'} 1st PC, four.lol solution {n + 1}", type_of, split_ok=True)
+            except ValueError:
+                continue        # a piece drawn across a row that clears first (like the DPC loader)
+            t.label = f"Jaws {kind + ' ' if kind else ''}#{n + 1}"
+            out.append(t)
     return out
 
 

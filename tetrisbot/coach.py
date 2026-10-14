@@ -206,13 +206,22 @@ class Coach:
         self.rec = None
 
     # ------------------------------------------------------------ recognition
+    def _openers(self):
+        """Opener families the advisor may recognise: the ones switched on in the Openers
+        window, plus the one it is showing (the bot's failsafe can suggest a switched-off
+        opener when none of the others fits the bag). Nothing switched on: all of them."""
+        fams = set(opener_priority())
+        ts = self.brain.ts
+        if ts is not None and ts.tmpl.stage in ("bag1", "pc1_pc"):
+            fams.add(ts.tmpl.family)
+        return fams or set(T.FAMILY_PRIORITY)
+
     def _stage_pool(self):
-        """Templates the user may be starting in the current stage (all openers, not only
-        the ones switched on: the user can build whatever they like)."""
+        """Templates the user may be starting in the current stage."""
         br = self.brain
         st = br.stage
         if st == "OPENER":
-            return T.openers() + T.dpc()
+            return T.openers(self._openers()) + T.dpc()
         if st == "BAG2":
             if br.family:
                 return T.second_bag(br.family)
@@ -230,10 +239,12 @@ class Coach:
     def _still_fit(self, board):
         """Every template of the current kind that contains all pieces placed so far."""
         ts = self.brain.ts
-        pool = list(sibling_pool(ts.tmpl))
         if ts.tmpl.stage in ("bag1", "pc1_pc"):
-            # an opener can turn into another family's opener as long as everything fits
-            pool += [t for t in T.openers() if t.stage != ts.tmpl.stage]
+            # an opener can turn into another family's opener as long as everything fits -
+            # but only the openers switched on
+            pool = T.openers(self._openers())
+        else:
+            pool = [t for t in sibling_pool(ts.tmpl) if t.stage == ts.tmpl.stage]
         return [h for h in (ts if t is ts.tmpl else _rebase(t, ts, board) for t in pool) if h is not None]
 
     def _rank(self, ts):
@@ -261,7 +272,14 @@ class Coach:
             cands = [h for h in (T.TState.fresh_on(t, before) for t in self._stage_pool()) if h]
         hits = [(h, sid) for h in cands for sid in [_slot_at(h, piece, cells)] if sid is not None]
         if not hits:
-            if ts is not None:
+            if ts is not None and ts.tmpl.stage in ("bag1", "pc1_pc"):
+                self.log(f"[coach] {piece} at {sorted(cells)} doesn't fit any opener switched on "
+                         f"({', '.join(sorted(self._openers()))})")
+                br.ts = None
+                br._set_stage("FREE", "(not one of your openers)")
+                br.free_note = "doesn't match any opener switched on (" + \
+                    ", ".join(T.FAMILY_NAMES[f] for f in sorted(self._openers())) + ")"
+            elif ts is not None:
                 self.log(f"[coach] {piece} at {sorted(cells)} is not part of {ts.tmpl.name} "
                          "or any setup like it")
                 br.ts = None
@@ -310,8 +328,8 @@ class Coach:
             what = f"hold {cur}, place {what}"
         else:
             what = f"place {what}"
-        guess = f" · guess, {self.fits} setups fit" if self.fits > 1 else ""
-        return f"next: {what} (outlined){guess}"
+        guess = f" · {self.fits} setups fit" if self.fits > 1 else ""
+        return f"next: {what}{guess}"         # the placement is outlined on the diagram
 
 
 class Watcher:

@@ -857,10 +857,11 @@ def test_sideways_moves_happen_before_the_soft_drop():
 
 
 def test_jaws_and_second_pc_templates_clear_the_field():
-    """Jaws (Hard Drop wiki, 22 solutions + mirrors) and four.lol's 2nd PC solutions are
-    perfect clears; every 2nd PC setup has solutions that start from it."""
+    """Jaws (four.lol ILSZ: 22 + ILOSZ 31 + ILJOSZ 15 solutions, mirrors, duplicates
+    removed) and four.lol's 2nd PC solutions are perfect clears; every 2nd PC setup has
+    solutions that start from it."""
     lib = templates.library()
-    assert len(lib["jaws"]) == 44
+    assert len(lib["jaws"]) == 108
     for t in lib["jaws"] + lib["pc2_pc"]:
         assert templates.residue(t).rows[0] == 0, t.name
     sol_fields = {tuple(t.g_board().rows) for t in lib["pc2_pc"]}
@@ -868,7 +869,7 @@ def test_jaws_and_second_pc_templates_clear_the_field():
         assert tuple(templates.residue(t).rows) in sol_fields, t.name
     # every Jaws solution leaves 4 pieces that some 2nd PC pattern takes - except #22,
     # which leaves two O's (no four.lol pattern; rated 0, so it's the last choice)
-    assert all(t.pc_rate >= 0.8 for t in lib["jaws"] if len(set(t.leftover2)) == 4)
+    assert all(t.pc_rate >= 0.8 for t in lib["jaws"] if t.leftover2 and len(set(t.leftover2)) == 4)
 
 
 def test_jaws_only_at_a_clean_bag_start():
@@ -991,9 +992,9 @@ def test_coach_agrees_with_the_bot_it_watches():
 
 
 def test_coach_recognises_the_users_opener():
-    # the user builds MS2 although the overlay prefers SD-PC: by the 3rd piece the display
-    # says MS2 and stays with it through the 2nd bag, the PC, the DPC and its PC
-    coach, user, trace = _follow("MS2", "SDPC", seed=3, pieces=36)
+    # the user builds MS2 although SD-PC is first in the overlay's order: by the 3rd piece
+    # the display says MS2 and stays with it through the 2nd bag, the PC, the DPC and its PC
+    coach, user, trace = _follow("MS2", "SDPC,MS2", seed=3, pieces=36)
     assert "Mountainous Stacking 2" in trace[2][2], trace[:4]
     assert all(u == c for u, c, _ in trace), trace
     assert any(t.startswith("DPC setup") for _, _, t in trace)
@@ -1004,7 +1005,7 @@ def test_coach_recognises_the_users_opener():
 def test_coach_switches_to_a_setup_that_can_still_be_finished():
     # Jigsaw's Jaws-style build fits Jaws #13 too; when the queue rules Jaws out the coach
     # follows Jigsaw instead of giving up
-    coach, user, trace = _follow("JIGSAW", "JAWS,SDPC", seed=5, pieces=30)
+    coach, user, trace = _follow("JIGSAW", "JAWS,JIGSAW", seed=5, pieces=30)
     assert "FREE" not in [c for _, c, _ in trace[3:]], trace
     assert coach.brain.stats["pc"] == user.stats["pc"]
 
@@ -1137,3 +1138,60 @@ def test_opener_priority_order_drives_the_suggestion():
         planner.configure(old, safe=False)
     coach, user, trace = _follow("MS2", "SDPC,MS2", seed=3, pieces=8)
     assert "Mountainous Stacking 2" in trace[2][2], trace[:4]
+
+
+def _coach_replay(openers, seq, placements):
+    """Advisor with these openers on; the user places `placements` (piece, cells) with the
+    7-bag order `seq`. Returns the coach."""
+    from tetrisbot.brain import Lookahead
+    from tetrisbot.coach import Coach
+    from tetrisbot.handling import Handling
+    from tetrisbot.model import SetupPrior
+
+    h = Handling()
+    h.openers = openers
+    planner.configure(h, safe=False)
+    c = Coach(log=lambda *a: None, lookahead=Lookahead(threaded=False), prior=SetupPrior(path=None))
+    b = core.Board()
+    c.begin(b.copy(), seq[0], None, seq[1:6], True)
+    for i, (piece, cells) in enumerate(placements):
+        before = b.copy()
+        x, y, r = core.identify(piece, cells)[0]
+        cleared = b.place_cells(core.cells_of(piece, r, x, y))
+        c.locked(before, piece, r, x, y, False, b.copy(), cleared)
+        c.spawned(b.copy(), seq[i + 1], None, seq[i + 2:i + 7])
+    return c
+
+
+def test_advisor_only_recognises_openers_that_are_switched_on():
+    # 2026-10-13 screenshot: Jaws + Jigsaw on, Z flat in columns 5-7 and O on the right
+    # fit only MS / MS2 (switched off): no MS2 on the display
+    seq = list("ZOSITLJZITLJOSIJLOSTZ")
+    O = [(8, 0), (9, 0), (8, 1), (9, 1)]
+    try:
+        c = _coach_replay("JAWS,JIGSAW", seq, [("Z", [(4, 1), (5, 1), (5, 0), (6, 0)]), ("O", O)])
+        assert "Mountainous" not in c.brain.display["title"] and c.brain.stage == "FREE"
+        assert "doesn't match any opener switched on" in c.brain.display["sub"]
+        # one column to the right it is four.lol's ILOSZ (O on the far right)
+        c = _coach_replay("JAWS,JIGSAW", seq, [("Z", [(5, 1), (6, 1), (6, 0), (7, 0)]), ("O", O)])
+        assert c.brain.display["title"] == "Opener: Jaws (ILOSZ)", c.brain.display
+        # Jaws is shown as its 4-piece build: no solution pieces that aren't placed yet
+        assert sum(ch.isupper() and ch not in "G" for row in c.brain.display["rows"] for ch in row) == 4 * 4
+        # with MS2 switched on the same pieces are MS2
+        c = _coach_replay("MS2", seq, [("Z", [(4, 1), (5, 1), (5, 0), (6, 0)]), ("O", O)])
+        assert "Mountainous Stacking 2" in c.brain.display["title"]
+    finally:
+        from tetrisbot.handling import Handling
+        planner.configure(Handling(), safe=False)
+
+
+def test_jaws_is_the_fourlol_ilsz_data():
+    raw = templates._jaws_templates()
+    kinds = {k: sum(1 for t in raw if t.name.startswith(k + "-") and t.name[len(k) + 1].isdigit())
+             for k in ("Jaws", "Jaws-ILOSZ", "Jaws-ILJOSZ")}
+    # 22 minimal ILSZ solutions, 33 ILOSZ (2 draw a piece across a clearing row), 15 ILJOSZ
+    assert kinds == {"Jaws": 22, "Jaws-ILOSZ": 31, "Jaws-ILJOSZ": 15}, kinds
+    for t in raw:
+        build = sorted(t.slots[s].ptype for s in t.slots if s.startswith("b"))
+        assert build == ["I", "L", "S", "Z"] and len(t.slots) == 10, t.name
+        assert templates.residue(t).rows[0] == 0, t.name

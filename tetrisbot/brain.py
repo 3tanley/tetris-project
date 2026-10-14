@@ -337,6 +337,7 @@ class Brain:
     def _set_stage(self, stage, why=""):
         if stage != self.stage:
             self.log(f"[stage] {self.stage} -> {stage} {why}".rstrip())
+            self.free_note = ""
         self.stage = stage
 
     def _unknown_chunk(self, seq):
@@ -1166,11 +1167,15 @@ class Brain:
         extra = getattr(self, "extra", None)
         if self.ts is not None:
             t = self.ts.tmpl
+            # Jaws is a 4-piece opener (I L S Z): until those are down, show just the build
+            # (and pieces already placed); the solution on top is chosen from the queue
+            jaws_build = t.family == "JAWS" and any(s.startswith("b") for s in self.ts.remaining)
             rows = []
             for row in reversed(t.grid):
                 line = ""
                 for tok in row:
-                    if tok is None:
+                    if tok is None or (jaws_build and tok not in ("G", "X") and not tok.startswith("b")
+                                       and tok in self.ts.remaining):
                         line += "."
                     elif tok == "G":
                         line += "G"
@@ -1188,7 +1193,16 @@ class Brain:
             if self.ts.remaining:
                 sub += f"\npriority: {T.priority_text(t, self.ts.remaining)}"
             name = t.label or t.name
-            if t.stage == "bag1" and t.family in T.FAMILY_NAMES:
+            if t.family == "JAWS":
+                kind = "ILJOSZ" if "ILJOSZ" in t.name else "ILOSZ" if "ILOSZ" in t.name else "ILSZ"
+                if jaws_build:
+                    name = f"Jaws ({_jaws_field(t, self.ts.remaining)}){' (mirrored)' if t.mirrored else ''}"
+                    sub = (f"4-piece build; the 1st PC on top is picked from the queue "
+                           f"(four.lol {kind} #{t.label.split('#')[-1]} fits so far)")
+                    sub += f"\npriority: {T.priority_text(t, [s for s in self.ts.remaining if s.startswith('b')])}"
+                else:
+                    title = "1st PC"
+            elif t.stage == "bag1" and t.family in T.FAMILY_NAMES:
                 name = T.FAMILY_NAMES[t.family]
                 if t.mirrored:
                     sub = "mirrored · " + sub
@@ -1206,10 +1220,26 @@ class Brain:
                                    + (f" · then {self.pc_outlook}" if getattr(self, "pc_outlook", "") else ""),
                             "rows": rows, "hint": hint}
         elif self.stage == "FREE":
-            self.display = {"title": title, "sub": "keeping the stack low, looking for perfect clears", "rows": []}
+            note = getattr(self, "free_note", "")
+            self.display = {"title": title, "rows": [],
+                            "sub": (note + "\n" if note else "") + "keeping the stack low, looking for perfect clears"}
         elif not (self.display and self.display["rows"]):
             self.display = {"title": title, "sub": "choosing…", "rows": []}
         # otherwise keep showing the last diagram until the next one is chosen
+
+
+_ILOSZ_O = frozenset({(8, 0), (9, 0), (8, 1), (9, 1)})
+_ILJOSZ_J = frozenset({(5, 1), (6, 1), (7, 1), (7, 0)})
+
+
+def _jaws_field(t, remaining):
+    """four.lol's name for the Jaws field built so far: ILSZ, ILOSZ (an O on the far
+    right) or ILJOSZ (and the J next to it); mirrored templates are checked mirrored."""
+    placed = {(t.slots[s].ptype, frozenset((9 - x, y) for x, y in t.slots[s].cells) if t.mirrored
+               else t.slots[s].cells) for s in t.slots if s not in remaining}
+    if ("O", _ILOSZ_O) not in placed:
+        return "ILSZ"
+    return "ILJOSZ" if ((T.MIRROR_TYPE["J"] if t.mirrored else "J"), _ILJOSZ_J) in placed else "ILOSZ"
 
 
 def _plan_picture(board, steps, remaining, nxt=None):

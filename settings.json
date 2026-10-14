@@ -14,6 +14,6 @@
   "check_piece": true,
   "gravity": "AUTO",
   "use_180": true,
-  "openers": "JAWS,JIGSAW,MS2,SDPC,MS,MS3",
+  "openers": "JAWS,JIGSAW",
   "mode": "BLITZ"
 }

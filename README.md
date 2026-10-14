@@ -84,22 +84,23 @@ Options (`./run_bot.command --help`):
 You play; the bot reads the screen every frame and keeps up with your game.
 
 * **What you're building:** every piece you lock is matched against all setups the bot
-  knows (every opener, enabled or not, their 2nd-bag setups, the four.lol SD-PC / Jigsaw /
-  2nd-PC solutions, every DPC setup and DPC PC solution). Every setup that contains all
+  knows (the openers switched on in the Openers window, their 2nd-bag setups, the four.lol
+  SD-PC / Jigsaw / 2nd-PC solutions, every DPC setup and DPC PC solution). Every setup that contains all
   the pieces you've placed so far stays a candidate; the others drop out. The solve panel
   shows the best candidate. Build the first 3 pieces of Mountainous Stacking 2 and it shows
   "Opener: Mountainous Stacking 2" with your pieces dimmed and the rest still to place.
 * **Next placement:** the bot then plans as if it were playing, from your board, hold and
   the next 5 pieces. Its best placement for the current piece is outlined in white on the
   diagram, and the status line says e.g. `next: hold T, place O`. With only 1-2 pieces
-  down, many setups still fit; the status says `guess, 14 setups fit` until it's clear.
+  down, many setups still fit; the status says `14 setups fit` until it's clear.
 * **DPC:** after your 8-line PC it works out the extra piece from what you placed, picks
   the DPC setup whose four.lol order rules fit the queue, and shows it with its piece
   dependencies (`priority: J › S › O › T`). After the TSD it picks the four.lol PC solution
   the next 5 pieces can build (or its own solver) and shows that.
 * **Settings apply:** the suggestions use your Handling and Openers settings (a fresh
-  bag suggests one of the openers you switched on). Recognition doesn't: whatever you
-  build is recognised.
+  bag suggests the first opener in your order that the bag allows), and only the openers
+  switched on are recognised. Pieces that fit none of them show "Free play: doesn't match
+  any opener switched on (…)", never a switched-off opener.
 * **When you leave the setup:** if a piece doesn't fit any candidate, it says so and
   falls back to free play (keep the stack low, look for perfect clears). When the setup it
   guessed can't be finished with the queue but another candidate still fits, it switches
@@ -187,12 +188,24 @@ opener on.
 
 ### Jaws (ILSZ) → 2nd PC → DPC
 
-From the [Hard Drop wiki](https://harddrop.com/wiki/Jaws) and
+From [four.lol ILSZ](https://four.lol/perfect-clears/ILSZ) and
 [four.lol 2nd PC](https://four.lol/perfect-clears/2nd) (`setups_jaws.py`, `setups_fourlol_2pc.py`):
 
-* **1st PC:** I L S Z on the left, then one of the wiki's 22 solutions (plus mirrors) with
-  the other 6 pieces. The bot commits to a solution once the visible pieces can finish it,
-  preferring the one whose 4 leftover pieces have the best 2nd PC pattern.
+* **The opener is 4 pieces:** I L S Z on the left (or mirrored: I J Z S on the right). Not
+  to be confused with Jigsaw's bag-1 build, which is 6 pieces. While it's being built
+  the solve panel shows just those 4 pieces ("Opener: Jaws (ILSZ)").
+* **1st PC:** a 4-line PC on top with the other 6 pieces, from four.lol's solutions (plus
+  mirrors): the 22 minimal ILSZ solutions (100% together), 31 for **ILOSZ** (an O on the
+  far right: 92.26%, 100% if the O is among the first 3 pieces of bag 2) and 15 for
+  **ILJOSZ** (J and O placed next to it: 58.33%). Two of four.lol's 33 ILOSZ solutions draw a
+  piece across a row that clears first and are left out, like such DPC solutions. The
+  panel names the field from where your O / J are ("Jaws (ILOSZ)"). The bot commits to a
+  solution once the visible pieces can finish it, preferring the one whose 4 leftover
+  pieces have the best 2nd PC pattern.
+* **Sequence search:** four.lol's "Solution Search for ILSZ" (605 solutions by piece order)
+  asks four.lol's server, which didn't answer when tried. The bot does the same check
+  itself: every solution above is tested against the queue + hold, including whether
+  each piece can actually reach its spot.
 * **When Jaws is used:** only at a fresh bag with an empty hold, and only if the bag lets
   I L S Z (or the mirror) go in while every other piece waits in hold, one at a time.
   Otherwise O, T or J would have to go into a solution before the queue shows which
