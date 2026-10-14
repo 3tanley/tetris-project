@@ -1,0 +1,182 @@
+{
+  ".claude/settings.json": {
+    "mtime": 1791579381.2729897,
+    "seen": 1791580157.7392268,
+    "ast_hash": "0e46dd92e0e383dbc0cef5b65c7a6bda",
+    "semantic_hash": ""
+  },
+  "settings.json": {
+    "mtime": 1791528769.3606255,
+    "seen": 1791580157.7392309,
+    "ast_hash": "962f5f2347a8ae236b3727e12d5d5524",
+    "semantic_hash": ""
+  },
+  "setup.sh": {
+    "mtime": 1791521231.6294951,
+    "seen": 1791580157.739233,
+    "ast_hash": "00c4ca635c1d9c9f900ea23a0f1f6e1d",
+    "semantic_hash": ""
+  },
+  "tests/fakegame.py": {
+    "mtime": 1791573234.4678245,
+    "seen": 1791580157.739234,
+    "ast_hash": "8be239103a32a16a4f63593d2c98bec9",
+    "semantic_hash": ""
+  },
+  "tests/test_bot.py": {
+    "mtime": 1791582204.7453935,
+    "seen": 1791582418.433666,
+    "ast_hash": "0af455917598e1e9a9857ac039d0f3bf",
+    "semantic_hash": ""
+  },
+  "tetrisbot/__init__.py": {
+    "mtime": 1791518717.0886145,
+    "seen": 1791580157.7392352,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "tetrisbot/__main__.py": {
+    "mtime": 1791523340.479968,
+    "seen": 1791580157.739236,
+    "ast_hash": "89dac0730a0c650c00b660c6d5644746",
+    "semantic_hash": ""
+  },
+  "tetrisbot/app.py": {
+    "mtime": 1791575889.28681,
+    "seen": 1791580157.739236,
+    "ast_hash": "dadd658d3d728db4b78f0e9ae2fa2ee3",
+    "semantic_hash": ""
+  },
+  "tetrisbot/brain.py": {
+    "mtime": 1791581831.561809,
+    "seen": 1791582418.433669,
+    "ast_hash": "4e89fa3f0bbd50ba63444e11e6e6688f",
+    "semantic_hash": ""
+  },
+  "tetrisbot/controller.py": {
+    "mtime": 1791573591.9984837,
+    "seen": 1791580157.7392378,
+    "ast_hash": "424c949f0e70f0abb53edf02f5a50a76",
+    "semantic_hash": ""
+  },
+  "tetrisbot/core.py": {
+    "mtime": 1791581281.5870752,
+    "seen": 1791582418.433671,
+    "ast_hash": "f90e5b2390cc2338df0d988142bbd44b",
+    "semantic_hash": ""
+  },
+  "tetrisbot/diagnose.py": {
+    "mtime": 1791520363.2347708,
+    "seen": 1791580157.739239,
+    "ast_hash": "0052bceddf41b5fea7ee37836972324f",
+    "semantic_hash": ""
+  },
+  "tetrisbot/fumen.py": {
+    "mtime": 1791518717.0813107,
+    "seen": 1791580157.73924,
+    "ast_hash": "fd0708b94a9a1a64a90e076deca02413",
+    "semantic_hash": ""
+  },
+  "tetrisbot/handling.py": {
+    "mtime": 1791522871.6732807,
+    "seen": 1791580157.73924,
+    "ast_hash": "f8a9a9ef72efd8adf84c826fce6608b2",
+    "semantic_hash": ""
+  },
+  "tetrisbot/hotkey.py": {
+    "mtime": 1791520360.155351,
+    "seen": 1791580157.739241,
+    "ast_hash": "f1a01d69ade472cd667e1afab653777f",
+    "semantic_hash": ""
+  },
+  "tetrisbot/keys.py": {
+    "mtime": 1791522939.0055616,
+    "seen": 1791580157.739241,
+    "ast_hash": "025cff5496108ef146c3261fe60dcf97",
+    "semantic_hash": ""
+  },
+  "tetrisbot/planner.py": {
+    "mtime": 1791582164.422537,
+    "seen": 1791582418.433675,
+    "ast_hash": "9dfa083dc73a56cf9ee737ab077ec812",
+    "semantic_hash": ""
+  },
+  "tetrisbot/settings_ui.py": {
+    "mtime": 1791523360.1618886,
+    "seen": 1791580157.739243,
+    "ast_hash": "8040f7509a809ef531b022fa677cb62d",
+    "semantic_hash": ""
+  },
+  "tetrisbot/setups_dpc.py": {
+    "mtime": 1791525383.5721488,
+    "seen": 1791580157.739243,
+    "ast_hash": "c696e70b39502ff7e16845161196fd30",
+    "semantic_hash": ""
+  },
+  "tetrisbot/setups_fourlol_sdpc.py": {
+    "mtime": 1791563622.9411278,
+    "seen": 1791580157.739244,
+    "ast_hash": "8ca0ba6f863b38af0946819305125035",
+    "semantic_hash": ""
+  },
+  "tetrisbot/setups_wiki.py": {
+    "mtime": 1791519062.2404788,
+    "seen": 1791580157.739244,
+    "ast_hash": "93793826e932434716788a8d2f742608",
+    "semantic_hash": ""
+  },
+  "tetrisbot/sim.py": {
+    "mtime": 1791573575.7899783,
+    "seen": 1791580157.739245,
+    "ast_hash": "6ade2ddec9f9beb6f4a12036d1e17d7e",
+    "semantic_hash": ""
+  },
+  "tetrisbot/templates.py": {
+    "mtime": 1791579836.1288495,
+    "seen": 1791580157.7392461,
+    "ast_hash": "021f2869e90661f6e3458895dbca7438",
+    "semantic_hash": ""
+  },
+  "tetrisbot/vision.py": {
+    "mtime": 1791573640.3717988,
+    "seen": 1791580157.7392461,
+    "ast_hash": "68cb9afb6e5811d396adc7dbe9562918",
+    "semantic_hash": ""
+  },
+  "CLAUDE.md": {
+    "mtime": 1791516817.2354364,
+    "seen": 1791580157.739247,
+    "ast_hash": "82efb97a359f5c7290bf2513d14686be",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1791582415.788365,
+    "seen": 1791582418.4336798,
+    "ast_hash": "1e944b6dffc56995c98546e69959165c",
+    "semantic_hash": ""
+  },
+  "requirements.txt": {
+    "mtime": 1791521231.6271877,
+    "seen": 1791580157.739248,
+    "ast_hash": "9686f91867882a790224b0168f119d6d",
+    "semantic_hash": ""
+  },
+  "tests/data/tetrio_allclear.png": {
+    "mtime": 1791528317.2024488,
+    "seen": 1791580157.739249,
+    "ast_hash": "ba9ec24eb58808d7eb82782bf7c34968",
+    "semantic_hash": ""
+  },
+  "tests/data/tetrio_board.png": {
+    "mtime": 1791521425.9299316,
+    "seen": 1791580157.739249,
+    "ast_hash": "b8a51cea0d6c0cfbcf9239d4729490bc",
+    "semantic_hash": ""
+  },
+  "tests/data/tetrio_live.png": {
+    "mtime": 1791525287.2810273,
+    "seen": 1791580157.73925,
+    "ast_hash": "43b071bd9afef0412ffb25a2c07b9a19",
+    "semantic_hash": ""
+  }
+}

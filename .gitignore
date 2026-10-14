@@ -1,0 +1,13 @@
+# local Python environment and caches (recreate with ./setup.sh)
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+debug/
+*.tmp
+# graphify's build cache and backups (graph.json / GRAPH_REPORT.md are kept)
+graphify-out/cache/
+*.graphify-bak
+# Claude Code hooks with paths on this machine
+.claude/
