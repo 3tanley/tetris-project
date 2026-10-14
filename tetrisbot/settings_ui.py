@@ -166,6 +166,9 @@ _BOT_SLIDERS = [
     ("key_gap_ms", "KEY GAP", 0.0, 40.0, "ms", "", ""),
     ("max_tap_ms", "MAX TAP", 0.5, 30.0, "ms", "", ""),
 ]
+_SPRINT_SLIDERS = [
+    ("sprint_preview", "NEXT PIECES", 0, 5, "n", "", ""),   # planned pieces shown after the one in play
+]
 
 W = 640
 
@@ -242,7 +245,7 @@ class HandlingWindow(NSObject):
 
     @objc.python_method
     def _build(self):
-        H = 1250
+        H = 1400
         scr = AppKit.NSScreen.mainScreen().visibleFrame()
         h_vis = min(H, scr.size.height - 20)
         style = (AppKit.NSWindowStyleMaskTitled | AppKit.NSWindowStyleMaskClosable
@@ -304,6 +307,13 @@ class HandlingWindow(NSObject):
         self.info.setTextColor_(C["check_text"])
         self.info.setMaximumNumberOfLines_(5)
         self.content.addSubview_(self.info)
+        y = 30 + 650 + 24 + 525 + 24
+        self._add(Box, AppKit.NSMakeRect(12, y, W - 24, 140), radius=6.0, fill=C["panel"], stroke=C["border"])
+        self._label("SPRINT", 28, y + 14, 300, 50, 46, C["title"], kern=2.5)
+        y += 70
+        for spec in _SPRINT_SLIDERS:
+            self._slider_row(*spec, y)
+            y += 58
         self._refresh()
         # scroll to top
         self.content.scrollPoint_((0, 0))
@@ -323,7 +333,7 @@ class HandlingWindow(NSObject):
         if spec["key"] in ("arr_ms", "das_ms", "dcd_ms"):
             f = 1 - f
         v = spec["lo"] + f * (spec["hi"] - spec["lo"])
-        return round(v) if spec["unit"] == "x" else round(v, 1)
+        return int(round(v)) if spec["unit"] in ("x", "n") else round(v, 1)
 
     @objc.python_method
     def _refresh(self):
@@ -342,6 +352,9 @@ class HandlingWindow(NSObject):
         if spec["unit"] == "x":
             spec["field"].setStringValue_("")
             spec["big"].s = "∞X" if v >= SDF_INF else f"{int(v)}X"
+        elif spec["unit"] == "n":
+            spec["field"].setStringValue_("")
+            spec["big"].s = str(int(v))
         else:
             spec["field"].setStringValue_(f"{v:g}MS")
             fr = v / FRAME_MS
@@ -373,6 +386,8 @@ class HandlingWindow(NSObject):
     def sliderMoved_(self, sender):
         spec = self.sliders[sender.tag()]
         v = self._value_from_pos(spec, sender.doubleValue())
+        if spec["unit"] == "n":
+            sender.setDoubleValue_(self._pos_from_value(spec, v))   # whole steps
         setattr(self.h, spec["key"], v)
         self._show(spec, v)
         self._apply()
@@ -386,6 +401,8 @@ class HandlingWindow(NSObject):
             self._show(spec, getattr(self.h, spec["key"]))
             return
         v = max(spec["lo"], min(spec["hi"], v))
+        if spec["unit"] == "n":
+            v = int(round(v))
         setattr(self.h, spec["key"], v)
         spec["slider"].setDoubleValue_(self._pos_from_value(spec, v))
         self._show(spec, v)
@@ -394,7 +411,7 @@ class HandlingWindow(NSObject):
     @objc.python_method
     def _reset(self):
         keep = {k: getattr(self.h, k) for k in ("optimize", "key_gap_ms", "max_tap_ms", "check_piece", "gravity",
-                                                 "use_180", "openers", "mode")}
+                                                 "use_180", "openers", "mode", "sprint_preview")}
         self.h = Handling(**keep)
         for c in self.checks:
             c.on = bool(getattr(self.h, _CHECK_KEYS[self.checks.index(c)]))

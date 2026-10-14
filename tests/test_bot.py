@@ -1217,6 +1217,71 @@ def test_sprint_63_advice_scores_tetrises():
         assert tetrises >= 9 and n <= 115 and soft <= 2, (seed, n, tetrises, soft)
 
 
+def test_sprint_right_side_patterns():
+    # the 3-wide side is built only from the six patterns of the user's screenshot
+    from tetrisbot import sprint
+    for rows in sprint.RIGHT_PATTERNS:
+        pieces = sprint._pattern_pieces(rows)
+        assert len(pieces) == 3 and all(len(cs) == 4 for _, cs in pieces), rows
+    assert sprint._NEXT[0] == frozenset("JLOT")             # S, Z and I never start a block
+    assert sprint._FULL3 in sprint._NEXT                    # every pattern can be finished
+    # bottom-up only: the J of pattern 1 can't hang over the empty middle column
+    flat_l = core.Board.from_strings([".........#", "######.###"])
+    assert sprint.right_blocks(flat_l)[1] == frozenset("OZ")
+    # following the advice keeps the 3-wide side on the patterns (a forced exception at most)
+    for seed in (2, 3):
+        g = sim.Game(seed)
+        offs = 0
+        while g.lines < 40:
+            before = sprint.right_blocks(g.board, sprint.align(g.board))[0]
+            g.apply(sprint.plan(g.board, g.current, g.hold, g.visible())[0][0])
+            offs += sprint.right_blocks(g.board, sprint.align(g.board))[0] > before
+        assert offs <= 1, (seed, offs)
+
+
+def test_sprint_display_shows_preview_pieces():
+    from tetrisbot import sprint
+    ready = core.Board.from_strings(["######.###"] * 4)
+    steps = sprint.plan(ready, "I", None, list("TLJOS"), sprint.depth_for(5))
+    assert steps[0][2] == 4 and len(steps) == 6
+    assert sprint.display(ready, steps, 0, preview=0)["labels"] == []
+    d = sprint.display(ready, steps, 0, preview=5)
+    assert [t for _, _, t in d["labels"]] == ["2", "3", "4", "5", "6"]
+    n = len(d["rows"])
+    # the pieces after the tetris sit above the 4 cleared rows, never on top of them
+    later = sum(ch.islower() for row in d["rows"] for ch in row)
+    assert later == 5 * 4 and all(not ch.islower() for row in d["rows"][n - 4:] for ch in row)
+    assert "TETRIS" in d["sub"]
+
+
+def test_sprint_bot_plays_40_lines():
+    # BOT PLAYS in Sprint: the controller drives SprintBrain on the fake TETR.IO screen
+    # (screen lag, line-clear delay, a few dropped inputs) to 40 lines, then stops
+    from fakegame import FakeTetrio
+    from tetrisbot.controller import Bot
+    from tetrisbot.handling import Handling
+
+    planner.configure(safe=False, gravity_rps=0)
+    fake = FakeTetrio(seed=8, latency_ms=40, clear_delay_ms=150, drop_rate=0.05)
+    fake.limit = 200
+    logs = []
+    bot = Bot({"settle_ms": 0}, log=logs.append, handling=Handling(mode="SPRINT", sprint_preview=5))
+    bot.autoplay = True
+    bot.screen = bot.kb = fake
+    bot.set_handling(bot.h)
+    bot.start()
+    t = time.time()
+    while time.time() - t < 120 and bot.running() and not any("40 lines" in m for m in logs):
+        time.sleep(0.05)
+    bot.stop()
+    bot.thread.join(5)
+    bot.lookahead.close()
+    done = [m for m in logs if "40 lines" in m]
+    assert done, logs[-10:]
+    assert int(done[0].split(": ")[1].split()[0]) >= 9           # tetrises
+    assert not any("resyncing" in m for m in logs), [m for m in logs if "sync" in m]
+
+
 def test_sprint_tetris_when_ready_and_i_not_burnt():
     from tetrisbot import sprint
     ready = core.Board.from_strings(["######.###"] * 4)

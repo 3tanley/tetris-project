@@ -326,7 +326,7 @@ class Overlay(NSObject):
         self.sprint = SolvePanel.alloc().initWithFrame_(
             AppKit.NSMakeRect(rect.origin.x, rect.origin.y - 2 * SOLVE_H - 16, W, 2 * SOLVE_H + 8))
         self.sprint.empty_title = "Sprint 6-3"
-        self.sprint.empty_sub = "you play; the panel shows where each piece goes"
+        self.sprint.empty_sub = "shows where each piece goes (6-3 stacking)"
         self.sprint.shown = 0
         self.sprint.update(None)
         self._show_panels()
@@ -346,10 +346,7 @@ class Overlay(NSObject):
     @objc.python_method
     def _show_autoplay(self):
         on = self.autoplay.state() == AppKit.NSControlStateValueOn
-        sprint = self.bot.sprint()
-        self.autoplay.setEnabled_(not sprint)
-        self.autoplay_note.setStringValue_("sprint: advice only" if sprint else
-                                           "on: bot presses keys" if on else "off: suggestions only")
+        self.autoplay_note.setStringValue_("on: bot presses keys" if on else "off: suggestions only")
 
     @objc.python_method
     def _show_panels(self):
@@ -393,11 +390,12 @@ class Overlay(NSObject):
         s = self.bot.status()
         running = self.bot.running()
         self.button.setTitle_("Stop" if running else "Start")
-        if s.get("sprint"):                 # sprint: 6-3 advice
+        if s.get("sprint"):                 # sprint: 6-3 advice, or the bot playing it
             lines = [
                 f"{s['state']}  ·  6-3 stacking",
                 f"lines {s['lines']}/40   pieces {s['pieces']}   {s['pps']:.2f} pps",
-                f"tetrises {s['tetrises']}   followed {s['followed']}/{s['suggested']}",
+                f"tetrises {s['tetrises']}   " + (f"followed {s['followed']}/{s['suggested']}" if "followed" in s
+                                                  else f"ghost fixes {s['fixes']}"),
                 s["advice"][:48],
                 (s["msg"] or "")[:48],
             ]

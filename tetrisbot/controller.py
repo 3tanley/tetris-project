@@ -109,13 +109,16 @@ class Bot:
         mode_changed = h.mode != getattr(self, "h", h).mode
         self.h = h
         self.kb.h = h
+        for obj in (self.coach, self.brain):     # sprint: pieces shown on the panel
+            if hasattr(obj, "preview"):
+                obj.preview = int(h.sprint_preview)
         planner.configure(h, safe=(h.gravity == "HIGH") or (planner.SETTINGS["safe"] and h.gravity == "AUTO"))
         if mode_changed:
             self.log(f"[mode] {h.mode.lower()}")
             self._restart()
 
     def sprint(self):
-        """Sprint mode: 6-3 stacking advice. The user always plays (no BOT PLAYS)."""
+        """Sprint mode: 6-3 stacking (advice, or the bot plays it with BOT PLAYS on)."""
         return self.h.mode == "SPRINT"
 
     def log(self, msg):
@@ -162,11 +165,13 @@ class Bot:
             threading.Thread(target=restart, daemon=True).start()
 
     def status(self):
-        from .sprint import SprintCoach
-        if isinstance(self.coach, SprintCoach):
-            if self.sprint():
+        from .sprint import SprintBrain, SprintCoach
+        if self.sprint():
+            if self.autoplay and isinstance(self.brain, SprintBrain):
+                return self._sprint_bot_status()
+            if isinstance(self.coach, SprintCoach):
                 return self._sprint_status()
-        elif not self.autoplay and self.coach is not None and not self.sprint():
+        elif not self.autoplay and self.coach is not None and not isinstance(self.coach, SprintCoach):
             return self._coach_status()
         pps = 0.0
         if self.t_start and self.pieces:
@@ -205,6 +210,18 @@ class Bot:
             "advice": c.advice(), "followed": c.followed, "suggested": c.suggested,
         }
 
+    def _sprint_bot_status(self):
+        br = self.brain
+        pps = self.pieces / max(1e-6, time.time() - self.t_start) if self.t_start and self.pieces else 0.0
+        return {
+            "state": self.state, "stage": "6-3", "pieces": self.pieces, "pps": pps, "pcs": 0, "tspins": 0,
+            "msg": self.last_msg, "safe": planner.SETTINGS["safe"], "fixes": self.corrections,
+            "lag_ms": self.lag * 1000, "grav": self.grav_rps,
+            "display": br.display, "bag": None, "next": None, "sprint": True,
+            "lines": br.lines, "tetrises": br.tetrises,
+            "advice": "bot plays 6-3" + ("  ·  done" if br.done() else ""),
+        }
+
     # ------------------------------------------------------------- vision
     def _locate(self):
         img = self.screen.full()
@@ -238,7 +255,7 @@ class Bot:
                         break
                     continue
                 self.log(f"Board found: {self.geo}")
-                if self.autoplay and not self.sprint():
+                if self.autoplay:
                     self._play_one_game()
                 else:
                     self._watch_game()
@@ -258,7 +275,7 @@ class Bot:
         self.state = "watching"
         self.lookahead.reset()
         if self.sprint():
-            self.coach = SprintCoach(log=self.log, threaded=True)
+            self.coach = SprintCoach(log=self.log, threaded=True, preview=int(self.h.sprint_preview))
         else:
             self.coach = Coach(log=self.log, lookahead=self.lookahead, prior=self.prior, threaded=True)
         w = Watcher(self.coach, self.log)
@@ -300,11 +317,17 @@ class Bot:
         fresh = board.rows[0] == 0 and hold is None
         self.board = board
         self.lookahead.reset()
-        self.brain = Brain(log=self.log, lookahead=self.lookahead)
-        self.brain.bag.reset(aligned=fresh)
-        if not fresh:
-            self.brain.stage = "FREE"
-            self.log("Joined mid-game: free play until the field is empty")
+        if self.sprint():
+            from .sprint import SprintBrain
+            self.brain = SprintBrain(log=self.log, preview=int(self.h.sprint_preview))
+            if not fresh:
+                self.log("[sprint] joined mid-game: lines are counted from here")
+        else:
+            self.brain = Brain(log=self.log, lookahead=self.lookahead)
+            self.brain.bag.reset(aligned=fresh)
+            if not fresh:
+                self.brain.stage = "FREE"
+                self.log("Joined mid-game: free play until the field is empty")
         cur, queue = p, q
         self.hold = hold
         self.pieces = 0
@@ -313,6 +336,9 @@ class Bot:
         self.log(f"Game started: current {cur}, next {''.join(queue)}")
         step = self._decide(self.brain, self.board, cur, self.hold, queue)
         while not self.stop_event.is_set():
+            if self.sprint() and self.brain.done():
+                self.state = "finished"
+                return                          # 40 lines: TETR.IO ends the game
             if step is None:
                 self.log("No legal move - stopping")
                 return
@@ -466,7 +492,7 @@ class Bot:
                    cleared=len(ncleared))
         # a new setup / PC choice (free play looks for PCs every piece while the field is
         # low) should see the queue piece this piece's spawn reveals
-        choosing = nbrain.ts is None and not nbrain.plan and (
+        choosing = not self.sprint() and nbrain.ts is None and not nbrain.plan and (
             nbrain.stage != "FREE" or (0 < nb.height() <= 6 and not planner.SETTINGS["safe"]))
         if choosing and not final:
             out["deferred"] = True

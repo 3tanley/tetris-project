@@ -31,8 +31,10 @@ class Handling:
     # openers the bot may build (templates.FAMILY_PRIORITY names, comma separated), in the
     # user's priority order (dragged in the Openers window): the first that can be built wins
     openers: str = "JAWS,SDPC,MS2,MS,MS3"
-    # game mode (overlay MODES row). Only BLITZ is implemented; SPRINT / VOD are placeholders
+    # game mode (overlay MODES row): BLITZ | SPRINT (VOD is a placeholder)
     mode: str = "BLITZ"
+    # Sprint panel: planned pieces shown after the one in play (0-5, settings SPRINT slider)
+    sprint_preview: int = 2
 
     def opener_order(self):
         """Switched-on openers, highest priority first."""

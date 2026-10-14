@@ -9,6 +9,8 @@ sprint guides):
   * flat but not perfectly flat: keep a spot for every piece, S and Z especially
   * no other column more than 2 deep (that needs an I, which belongs in the well)
   * keep the 3-wide side level with the 6-wide side
+  * the 3-wide side is built in 4-row blocks, each one of the user's six patterns
+    (RIGHT_PATTERNS); a piece only goes there as the next piece of a pattern
   * I: tetris when 4 rows are ready; otherwise hold it ("keep an I in reserve") or lay
     it flat - never burn it in the well for fewer lines
   * no soft drops, fewest key presses (sprint is about speed)
@@ -18,8 +20,13 @@ the next pieces with straight drops, scored by the rules above.
 
 SprintCoach follows the user's game (fed by coach.Watcher) and builds the solve panel:
 the board, the well, the piece in play where it should go (outlined), and the next
-pieces of the plan, numbered.
+`preview` pieces of the plan, numbered (Handling.sprint_preview, 0-5). SprintBrain is
+the same advice played by the bot (BOT PLAYS on): controller.Bot drives it like the
+Blitz Brain.
 """
+from collections import Counter
+from itertools import combinations
+
 from . import core, planner
 from .coach import Events
 
@@ -27,9 +34,79 @@ WELL = 6                       # column 7
 LEFT = range(0, WELL)          # the 6-wide stack
 RIGHT = range(WELL + 1, core.W)  # the 3-wide stack
 GOAL = 40
-DEPTH = 3                      # pieces planned (current + next 2)
+DEPTH = 3                      # pieces planned at least (current + next 2)
 BEAM = 10
+PREVIEW = 2                    # planned pieces shown after the one in play (0-5)
 _NOT_WELL = core.FULL & ~(1 << WELL)
+
+
+def depth_for(preview):
+    """Pieces to plan so the panel can show `preview` pieces after the one in play."""
+    return 1 + max(DEPTH - 1, min(5, preview))
+
+
+# The 3-wide side, from the user's screenshot: every 4 rows of it are one of these
+# patterns (rows top -> bottom, the well side on the left), 3 pieces each, placed
+# bottom-up without tucks.
+RIGHT_PATTERNS = [
+    ("JJZ", "JZZ", "JZL", "LLL"),
+    ("TLL", "TTL", "TTL", "TTT"),
+    ("JJJ", "OOJ", "OOL", "LLL"),
+    ("SLL", "SSL", "JSL", "JJJ"),
+    ("LLL", "LLL", "OOL", "OOL"),
+    ("JJJ", "ZZJ", "JZZ", "JJJ"),
+]
+_FULL3 = (1 << 12) - 1           # a finished block: 3 columns x 4 rows, bit = 3 * row + column
+OFF_PATTERN = 25.0               # score per 4-row block of the 3-wide side that is no pattern
+BALANCE = 1.0                    # score per row the two sides' average heights differ
+
+
+def _pattern_pieces(rows):
+    """Split a pattern into its pieces: [(letter, cells)], cells = (column, row) from the
+    bottom-left. Two touching pieces of the same letter are separated by shape."""
+    by = {}
+    for j, row in enumerate(rows):
+        for i, ch in enumerate(row):
+            by.setdefault(ch, []).append((i, len(rows) - 1 - j))
+    out = []
+    for p, cells in by.items():
+        if len(cells) == 4:
+            out.append((p, tuple(sorted(cells))))
+            continue
+        for a in combinations(cells, 4):
+            b = tuple(c for c in cells if c not in a)
+            if core.identify(p, a) and core.identify(p, b):
+                out += [(p, tuple(sorted(a))), (p, b)]
+                break
+        else:
+            raise ValueError(f"pattern {rows}: can't split the {p} cells into pieces")
+    return out
+
+
+def _pattern_states():
+    """Every partly built block reachable by placing pattern pieces bottom-up (each piece
+    resting on the block floor or on blocks below, nothing hanging): mask -> pieces that
+    may go on it next."""
+    nxt = {}
+    for rows in RIGHT_PATTERNS:
+        pieces = [(p, sum(1 << (3 * y + x) for x, y in cs), cs) for p, cs in _pattern_pieces(rows)]
+        todo, seen = [0], {0}
+        while todo:
+            m = todo.pop()
+            nxt.setdefault(m, set())
+            hs = [next((y for y in range(4) if not m >> (3 * y + x) & 1), 4) for x in range(3)]
+            for p, pm, cs in pieces:
+                if m & pm:
+                    continue
+                if all(min(y for cx, y in cs if cx == x) == hs[x] for x in {cx for cx, _ in cs}):
+                    nxt[m].add(p)
+                    if (m | pm) not in seen:
+                        seen.add(m | pm)
+                        todo.append(m | pm)
+    return {m: frozenset(v) for m, v in nxt.items()}
+
+
+_NEXT = _pattern_states()          # mask -> pieces that continue a pattern
 
 # bottom profile of every piece / rotation: (width, [lowest cell per column]) - a piece
 # fits cleanly (no hole under it) where the column heights follow that profile
@@ -53,11 +130,11 @@ def ready_rows(board):
     return n
 
 
-def _fits(hs, piece):
+def _fits(hs, piece, regions=(LEFT, RIGHT)):
     """Can `piece` go somewhere without a hole and without touching the well?"""
     for prof in _PROFILES[piece]:
         w = len(prof)
-        for region in (LEFT, RIGHT):
+        for region in regions:
             lo, hi = region[0], region[-1]
             for x in range(lo, hi - w + 2):
                 base = hs[x] - prof[0]
@@ -66,8 +143,33 @@ def _fits(hs, piece):
     return False
 
 
-def evaluate(board, hold=None):
-    """Board quality for 6-3 stacking (higher = better)."""
+def right_blocks(board, base=0, hs=None):
+    """The 3-wide side in 4-row blocks from row `base` up: (blocks that are not a
+    pattern, pieces that can go there next by the patterns)."""
+    hs = hs or board.col_heights()
+    top = max(hs[x] for x in RIGHT)
+    bad, nxt = 0, None
+    for y in range(base, top, 4):
+        m = 0
+        for dy in range(4):
+            if y + dy < core.H:
+                m |= (board.rows[y + dy] >> RIGHT[0] & 7) << (3 * dy)
+        if m not in _NEXT and m != _FULL3:
+            bad += 1
+        elif nxt is None and m != _FULL3:
+            nxt = _NEXT[m]
+    return bad, (_NEXT[0] if nxt is None else nxt)
+
+
+def align(board):
+    """Row where the 3-wide side's blocks start (0-3): the one that fits the patterns
+    best (only line clears other than tetrises shift it)."""
+    hs = board.col_heights()
+    return min(range(4), key=lambda b: (right_blocks(board, b, hs)[0], b))
+
+
+def evaluate(board, hold=None, base=0):
+    """Board quality for 6-3 stacking (higher = better). `base`: see align()."""
     hs = board.col_heights()
     holes = covered = 0
     for x in range(core.W):
@@ -80,10 +182,15 @@ def evaluate(board, hold=None):
                 covered += hs[x] - y
     in_well = sum(board.rows[y] >> WELL & 1 for y in range(hs[WELL]))
     bump = sum(abs(hs[i] - hs[i + 1]) for i in range(LEFT[0], LEFT[-1]))
-    bump += sum(abs(hs[i] - hs[i + 1]) for i in range(RIGHT[0], RIGHT[-1]))
+    # the 3-wide side follows the patterns; only once it is off them (the user stacked
+    # something else) does it fall back to the flat-stack rules
+    off, right_next = right_blocks(board, base, hs)
+    regions = (LEFT,) if not off else (LEFT, RIGHT)
+    if off:
+        bump += sum(abs(hs[i] - hs[i + 1]) for i in range(RIGHT[0], RIGHT[-1]))
     # columns more than 2 deep need an I; the well's neighbours only count their own side
     deep = 0
-    for region in (LEFT, RIGHT):
+    for region in regions:
         lo, hi = region[0], region[-1]
         for x in region:
             left = hs[x - 1] if x > lo else 99
@@ -98,9 +205,11 @@ def evaluate(board, hold=None):
     maxh = max(hs)
     ready = ready_rows(board)
     score = (-6.0 * holes - 1.0 * covered - 5.0 * in_well - 0.45 * bump - 3.0 * deep
-             - 0.35 * abs(left_avg - right_avg) + 1.2 * min(ready, 4) + 0.2 * max(0, ready - 4))
+             - BALANCE * abs(left_avg - right_avg) + 1.2 * min(ready, 4) + 0.2 * max(0, ready - 4))
     score -= 0.8 * max(0, maxh - 9) + 0.5 * max(0, maxh - 13) ** 2
-    score -= sum(w for p, w in _FIT_WEIGHT.items() if not _fits(hs, p))
+    score -= OFF_PATTERN * off
+    score -= sum(w for p, w in _FIT_WEIGHT.items()
+                 if not (_fits(hs, p, regions) or (not off and p in right_next)))
     if hold == "I":
         score += 1.5                         # an I in reserve
     return score
@@ -122,11 +231,11 @@ def reward(lines, keys=None, maxh=0):
 
 
 class Node:
-    __slots__ = ("score", "acc", "board", "i", "hold", "path")
+    __slots__ = ("score", "acc", "board", "i", "hold", "path", "base")
 
-    def __init__(self, acc, board, i, hold, path):
-        self.acc, self.board, self.i, self.hold, self.path = acc, board, i, hold, path
-        self.score = acc + evaluate(board, hold)
+    def __init__(self, acc, board, i, hold, path, base):
+        self.acc, self.board, self.i, self.hold, self.path, self.base = acc, board, i, hold, path, base
+        self.score = acc + evaluate(board, hold, base)
 
 
 def plan(board, cur, hold, queue, depth=DEPTH, beam=BEAM):
@@ -135,7 +244,7 @@ def plan(board, cur, hold, queue, depth=DEPTH, beam=BEAM):
     straight drops (where they go if the plan holds)."""
     seq = [cur] + list(queue)
     depth = min(depth, len(seq))
-    nodes = [Node(0.0, board, 0, hold, [])]
+    nodes = [Node(0.0, board, 0, hold, [], align(board))]
     for d in range(depth):
         out = []
         for n in nodes:
@@ -154,7 +263,8 @@ def plan(board, cur, hold, queue, depth=DEPTH, beam=BEAM):
                     if pl is None:
                         rot, x, y = _locate(p, cells)
                         pl = core.Placement(p, rot, x, y, [], None)
-                    out.append(Node(n.acc + r, nb, ni, nh, n.path + [(planner.Step(used_hold, pl), cells, lines)]))
+                    out.append(Node(n.acc + r, nb, ni, nh, n.path + [(planner.Step(used_hold, pl), cells, lines)],
+                                    (n.base - lines) % 4))
         if not out:
             break
         out.sort(key=lambda n: n.score, reverse=True)
@@ -169,15 +279,19 @@ def _locate(piece, cells):
 
 
 # ------------------------------------------------------------ display
-def display(board, steps, lines_done=0):
+def display(board, steps, lines_done=0, preview=PREVIEW):
     """Solve-panel picture: the board in grey, the piece in play in colour (outlined) and
-    the next planned pieces dimmed and numbered. Stops after the first line clear (the
-    rows move after that)."""
+    the next `preview` planned pieces dimmed and numbered. Pieces after a line clear are
+    drawn where they will sit on the stack (the cleared rows stay in the picture)."""
+    b = board.copy()
+    ymap = list(range(core.H))         # row after the clears so far -> row in the picture
     shown = []
-    for k, (st, cells, cleared) in enumerate(steps):
-        shown.append((k, st.pl.piece, cells))
+    for k, (st, cells, _) in enumerate(steps[:1 + max(0, preview)]):
+        shown.append((k, st.pl.piece, [(x, ymap[y]) for x, y in cells]))
+        cleared = set(b.place_cells(cells))
         if cleared:
-            break
+            keep = [ymap[y] for y in range(core.H) if y not in cleared]
+            ymap = keep + list(range(ymap[-1] + 1, ymap[-1] + 1 + len(cleared)))
     top = max([board.height()] + [y + 1 for _, _, cs in shown for _, y in cs])
     n = max(8, min(20, top + 2))
     grid = [["G" if board.filled(x, y) else "." for x in range(core.W)] for y in range(n)]
@@ -196,8 +310,11 @@ def display(board, steps, lines_done=0):
     ready = ready_rows(board)
     left = max(0, GOAL - lines_done)
     if steps:
-        if steps[0][2] == 4:
+        tetris = next((k for k, (_, _, cl) in enumerate(steps[:1 + max(0, preview)]) if cl == 4), None)
+        if tetris == 0:
             note = "TETRIS: I down the well"
+        elif tetris is not None:
+            note = f"tetris with piece {tetris + 1}"
         elif ready >= 4:
             note = f"tetris ready ({ready} rows) - waiting for an I"
         else:
@@ -211,8 +328,9 @@ def display(board, steps, lines_done=0):
 class SprintCoach(Events):
     """Follows the user's sprint game and suggests 6-3 placements. Same events as Coach."""
 
-    def __init__(self, log=print, threaded=False):
+    def __init__(self, log=print, threaded=False, preview=PREVIEW):
         self.log = log
+        self.preview = preview         # planned pieces shown after the one in play
         self.spawn = None
         self.rec = None                # suggested Step for the piece in play
         self.steps = []
@@ -235,9 +353,9 @@ class SprintCoach(Events):
         if self.threaded and self._q.qsize() > 0:
             self.rec = None            # the user is already further: don't plan for a past piece
             return
-        self.steps = plan(board, cur, hold, queue)
+        self.steps = plan(board, cur, hold, queue, depth_for(self.preview))
         self.rec = self.steps[0][0] if self.steps else None
-        self.display = display(board, self.steps, self.lines)
+        self.display = display(board, self.steps, self.lines, self.preview)
 
     def _locked(self, before, piece, rot, x, y, used_hold, after, cleared):
         self.pieces += 1
@@ -262,3 +380,55 @@ class SprintCoach(Events):
         if self.steps and self.steps[0][2] == 4:
             what += " - TETRIS"
         return f"next: {what}"
+
+
+class SprintBrain:
+    """BOT PLAYS in Sprint: plays the 6-3 advice. Has the parts of brain.Brain's interface
+    that controller.Bot uses (decide / on_lock / clone / adopt / stage / ts / plan)."""
+
+    def __init__(self, log=print, preview=PREVIEW):
+        self.log = log
+        self.preview = preview
+        self.stage = "6-3"
+        self.ts = None                 # (Blitz setup state: never used here)
+        self.plan = []
+        self.stats = Counter()
+        self.display = None
+        self.bag_view = None
+        self.lines = self.tetrises = 0
+
+    def clone(self):
+        b = SprintBrain.__new__(SprintBrain)
+        b.__dict__.update(self.__dict__)
+        b._real_log = getattr(self, "_real_log", self.log)
+        b._buffer = []
+        b.log = b._buffer.append       # held back until this copy is adopted
+        b.stats = Counter(self.stats)
+        return b
+
+    def adopt(self):
+        real = getattr(self, "_real_log", None)
+        if real is not None:
+            for m in getattr(self, "_buffer", []):
+                real(m)
+            self.log, self._buffer = real, []
+        return self
+
+    def done(self):
+        return self.lines >= GOAL
+
+    def decide(self, board, cur, hold, queue):
+        steps = plan(board, cur, hold, queue, depth_for(self.preview))
+        self.display = display(board, steps, self.lines, self.preview)
+        return steps[0][0] if steps else None
+
+    def on_lock(self, step, hold_was_empty, cleared, board):
+        n = len(cleared)
+        self.lines += n
+        if n == 4:
+            self.tetrises += 1
+            self.stats["tetris"] += 1
+        elif n:
+            self.stats["burn"] += n
+        if self.lines >= GOAL and self.lines - n < GOAL:
+            self.log(f"[sprint] {GOAL} lines: {self.tetrises} tetrises")
