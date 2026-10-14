@@ -436,82 +436,270 @@ _CHECK_KEYS = ["prevent_accidental_hard_drops", "cancel_das_on_direction_change"
                "check_piece", "use_180"]
 
 
+# ------------------------------------------------------------------ openers window
+# Translucent like the overlay. Switched-on openers sit on top in priority order (drag a
+# row to move it; the first one that can be built is used), switched-off ones below in
+# alphabetical order.
+OW = 340            # window width
+ROW_H = 44          # row pitch (row + gap)
+HEAD_H = 26         # section header height
+TOP = 64            # space for the title
+
+
+def _sys_text(s, size, color, bold=False, mono=False):
+    font = (AppKit.NSFont.monospacedSystemFontOfSize_weight_(size, 0) if mono else
+            AppKit.NSFont.systemFontOfSize_weight_(size, AppKit.NSFontWeightSemibold if bold else 0))
+    return AppKit.NSAttributedString.alloc().initWithString_attributes_(s, {
+        AppKit.NSFontAttributeName: font, AppKit.NSForegroundColorAttributeName: color})
+
+
+def _white(a):
+    return AppKit.NSColor.colorWithWhite_alpha_(1.0, a)
+
+
+class OpenerRow(FlippedView):
+    """One opener: rank + drag grip (when on), name, PC chance, on/off switch."""
+
+    def mouseDownCanMoveWindow(self):
+        return False                     # a drag on a row reorders, it doesn't move the window
+
+    def drawRect_(self, rect):
+        b = self.bounds()
+        fill = _white(0.24 if self.dragging else 0.12 if self.on else 0.05)
+        _round_rect(AppKit.NSInsetRect(b, 0.5, 0.5), 8, fill, _white(0.35) if self.dragging else None)
+        x = 14
+        if self.on:
+            _sys_text(str(self.rank), 13, _white(0.95), bold=True).drawAtPoint_((12, 12))
+            _white(0.55).setFill()                       # grip: three short bars
+            for k in range(3):
+                AppKit.NSBezierPath.fillRect_(AppKit.NSMakeRect(30, 15 + k * 5, 12, 2))
+            x = 52
+        _sys_text(T.FAMILY_NAMES[self.fam], 13, _white(1.0 if self.on else 0.78), bold=True).drawAtPoint_((x, 4))
+        _sys_text(f"{T.PC_RATE[self.fam]:.1%} PC chance", 10, _white(0.6 if self.on else 0.5),
+                  mono=True).drawAtPoint_((x, 22))
+
+
+class OpenerList(FlippedView):
+    """The two sections. Drag logic lives in drag_start / drag_move / drag_end so it can
+    be driven without real mouse events."""
+
+    def mouseDownCanMoveWindow(self):
+        return False
+
+    @objc.python_method
+    def setup(self, order, cb):
+        self.order = list(order)         # switched-on families, priority first
+        self.cb = cb                     # cb(new_order) after every change
+        self.drag = None
+        self.rows = {}
+        w = self.bounds().size.width
+        for fam in T.FAMILY_PRIORITY:
+            r = OpenerRow.alloc().initWithFrame_(AppKit.NSMakeRect(0, 0, w, ROW_H - 6))
+            r.fam, r.on, r.rank, r.dragging = fam, fam in self.order, 0, False
+            sw = AppKit.NSSwitch.alloc().initWithFrame_(AppKit.NSMakeRect(w - 52, 7, 42, 24))
+            sw.setTarget_(self)
+            sw.setAction_("switched:")
+            sw.setTag_(T.FAMILY_PRIORITY.index(fam))
+            r.addSubview_(sw)
+            r.switch = sw
+            self.addSubview_(r)
+            self.rows[fam] = r
+        self.on_head = self._header()
+        self.off_head = self._header()
+        self.layout_rows(animate=False)
+
+    @objc.python_method
+    def _header(self):
+        f = AppKit.NSTextField.labelWithString_("")
+        f.setFont_(AppKit.NSFont.systemFontOfSize_weight_(10, AppKit.NSFontWeightSemibold))
+        f.setTextColor_(_white(0.6))
+        self.addSubview_(f)
+        return f
+
+    @objc.python_method
+    def off_list(self):
+        return sorted((f for f in T.FAMILY_PRIORITY if f not in self.order), key=lambda f: T.FAMILY_NAMES[f])
+
+    @objc.python_method
+    def on_top(self):
+        return HEAD_H
+
+    @objc.python_method
+    def layout_rows(self, animate=True):
+        w = self.bounds().size.width
+        y = 0
+        self.on_head.setFrame_(AppKit.NSMakeRect(4, y + 6, w - 8, 16))
+        self.on_head.setStringValue_("ON  ·  DRAG TO SET THE ORDER  ·  TOP IS TRIED FIRST" if self.order
+                                     else "ON  ·  NONE: ANY OPENER MAY BE USED")
+        y += HEAD_H
+        frames = {}
+        for n, fam in enumerate(self.order):
+            frames[fam] = AppKit.NSMakeRect(0, y, w, ROW_H - 6)
+            self.rows[fam].rank = n + 1
+            y += ROW_H
+        self.off_head.setFrame_(AppKit.NSMakeRect(4, y + 6, w - 8, 16))
+        self.off_head.setStringValue_("OFF" if self.off_list() else "")
+        y += HEAD_H
+        for fam in self.off_list():
+            frames[fam] = AppKit.NSMakeRect(0, y, w, ROW_H - 6)
+            y += ROW_H
+        self.frames = frames             # where every row is going (frames animate)
+        if animate:
+            AppKit.NSAnimationContext.beginGrouping()
+            AppKit.NSAnimationContext.currentContext().setDuration_(0.15)
+        for fam, fr in frames.items():
+            r = self.rows[fam]
+            r.on = fam in self.order
+            r.switch.setState_(AppKit.NSControlStateValueOn if r.on else AppKit.NSControlStateValueOff)
+            if self.drag and self.drag["fam"] == fam:
+                continue                 # the dragged row follows the mouse
+            (r.animator() if animate else r).setFrame_(fr)
+            r.setNeedsDisplay_(True)
+        if animate:
+            AppKit.NSAnimationContext.endGrouping()
+
+    # --- switching
+    def switched_(self, sender):
+        fam = T.FAMILY_PRIORITY[sender.tag()]
+        self.set_on(fam, sender.state() == AppKit.NSControlStateValueOn)
+
+    @objc.python_method
+    def set_on(self, fam, on):
+        self.order = [f for f in self.order if f != fam] + ([fam] if on else [])
+        self.layout_rows()
+        self.cb(list(self.order))
+
+    # --- dragging (switched-on rows only)
+    @objc.python_method
+    def drag_start(self, y):
+        for fam in self.order:
+            fr = self.frames[fam]
+            if fr.origin.y <= y < fr.origin.y + fr.size.height:
+                self.drag = {"fam": fam, "dy": y - fr.origin.y, "from": list(self.order)}
+                r = self.rows[fam]
+                r.dragging = True
+                r.removeFromSuperview()          # bring to front
+                self.addSubview_(r)
+                r.setNeedsDisplay_(True)
+                return True
+        return False
+
+    @objc.python_method
+    def drag_move(self, y):
+        if not self.drag:
+            return
+        fam = self.drag["fam"]
+        top = y - self.drag["dy"]
+        lo, hi = self.on_top(), self.on_top() + (len(self.order) - 1) * ROW_H
+        top = max(lo - 8, min(hi + 8, top))
+        r = self.rows[fam]
+        r.setFrameOrigin_((0, top))
+        idx = max(0, min(len(self.order) - 1, int(round((top - lo) / ROW_H))))
+        if self.order.index(fam) != idx:
+            self.order.remove(fam)
+            self.order.insert(idx, fam)
+            self.layout_rows()
+
+    @objc.python_method
+    def drag_end(self):
+        if not self.drag:
+            return
+        fam, before = self.drag["fam"], self.drag["from"]
+        self.rows[fam].dragging = False
+        self.drag = None
+        self.layout_rows()
+        if self.order != before:
+            self.cb(list(self.order))
+
+    def mouseDown_(self, ev):
+        self.drag_start(self.convertPoint_fromView_(ev.locationInWindow(), None).y)
+
+    def mouseDragged_(self, ev):
+        self.drag_move(self.convertPoint_fromView_(ev.locationInWindow(), None).y)
+
+    def mouseUp_(self, ev):
+        self.drag_end()
+
+
 class OpenersWindow(NSObject):
-    """Which openers the bot may build (its own window, opened from the overlay).
-    Saved in settings.json with the handling settings."""
+    """Which openers the bot may build, and in which order (opened from the overlay).
+    Saved in settings.json with the handling settings. A translucent panel like the
+    overlay: clicking it doesn't take keyboard focus from the browser."""
 
     def initWithBot_(self, bot):
         self = objc.super(OpenersWindow, self).init()
         if self is None:
             return None
         self.bot = bot
-        self.prev_app = None
         self._build()
         return self
 
     @objc.python_method
-    def _add(self, cls, frame, **attrs):
-        v = cls.alloc().initWithFrame_(frame)
-        for k, val in attrs.items():
-            setattr(v, k, val)
-        self.content.addSubview_(v)
-        return v
-
-    @objc.python_method
-    def _label(self, s, x, y, w, h, size, color, font="DINCondensed-Bold", center=False, kern=1.2):
-        return self._add(Label, AppKit.NSMakeRect(x, y, w, h), s=s, size=size, color=color,
-                         fontname=font, center=center, kern=kern)
-
-    @objc.python_method
     def _build(self):
-        fams = T.FAMILY_PRIORITY
-        H = 150 + 42 * len(fams)
-        style = (AppKit.NSWindowStyleMaskTitled | AppKit.NSWindowStyleMaskClosable
-                 | AppKit.NSWindowStyleMaskFullSizeContentView)
-        win = AppKit.NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
-            AppKit.NSMakeRect(0, 0, W, H), style, AppKit.NSBackingStoreBuffered, False)
-        win.setTitle_("Openers")
-        win.setTitlebarAppearsTransparent_(True)
-        win.setAppearance_(AppKit.NSAppearance.appearanceNamed_(AppKit.NSAppearanceNameDarkAqua))
-        win.setBackgroundColor_(C["page"])
-        win.setReleasedWhenClosed_(False)
-        win.setDelegate_(self)
-        win.center()
-        self.content = FlippedView.alloc().initWithFrame_(AppKit.NSMakeRect(0, 0, W, H))
-        win.setContentView_(self.content)
-        self.win = win
-        y = 30
-        self._add(Box, AppKit.NSMakeRect(12, y, W - 24, H - 42), radius=6.0, fill=C["panel"], stroke=C["border"])
-        self._label("OPENERS", 28, y + 14, 300, 50, 46, C["title"], kern=2.5)
-        self._label("OF THE ONES ON: BEST BUILD CHANCE X PC CHANCE. NONE BUILDABLE -> ANY.",
-                    28, y + 62, W - 56, 20, 14, C["dim"])
-        y += 92
-        self.checks = []
-        for fam in fams:
-            text = f"{T.FAMILY_NAMES[fam].upper()}  ({T.PC_RATE[fam]:.1%} PC)"
-            self.checks.append(self._add(Check, AppKit.NSMakeRect(28, y, W - 56, 32), s=text,
-                                         on=self.bot.h.opener_on(fam),
-                                         cb=lambda on, f=fam: self._set(f, on)))
-            y += 42
+        n = len(T.FAMILY_PRIORITY)
+        H = TOP + 2 * HEAD_H + n * ROW_H + 14
+        style = AppKit.NSWindowStyleMaskBorderless | AppKit.NSWindowStyleMaskNonactivatingPanel
+        p = AppKit.NSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
+            AppKit.NSMakeRect(0, 0, OW, H), style, AppKit.NSBackingStoreBuffered, False)
+        p.setLevel_(AppKit.NSStatusWindowLevel)
+        p.setOpaque_(False)
+        p.setBackgroundColor_(AppKit.NSColor.clearColor())
+        p.setAlphaValue_(0.94)
+        p.setHasShadow_(True)
+        p.setMovableByWindowBackground_(True)
+        p.setHidesOnDeactivate_(False)
+        p.setFloatingPanel_(True)
+        p.setBecomesKeyOnlyIfNeeded_(True)
+        p.setReleasedWhenClosed_(False)
+        p.setCollectionBehavior_(AppKit.NSWindowCollectionBehaviorCanJoinAllSpaces
+                                 | AppKit.NSWindowCollectionBehaviorFullScreenAuxiliary)
+        bg = AppKit.NSVisualEffectView.alloc().initWithFrame_(AppKit.NSMakeRect(0, 0, OW, H))
+        bg.setMaterial_(AppKit.NSVisualEffectMaterialHUDWindow)
+        bg.setBlendingMode_(AppKit.NSVisualEffectBlendingModeBehindWindow)
+        bg.setState_(AppKit.NSVisualEffectStateActive)
+        bg.setWantsLayer_(True)
+        bg.layer().setCornerRadius_(12)
+        bg.layer().setMasksToBounds_(True)
+        p.setContentView_(bg)
+
+        title = AppKit.NSTextField.labelWithString_("Openers")
+        title.setFont_(AppKit.NSFont.boldSystemFontOfSize_(15))
+        title.setTextColor_(AppKit.NSColor.whiteColor())
+        title.setFrame_(AppKit.NSMakeRect(16, H - 34, 200, 20))
+        bg.addSubview_(title)
+        sub = AppKit.NSTextField.labelWithString_("The bot builds the first one on the list that this bag "
+                                                  "allows. The advisor follows whatever you build.")
+        sub.setFont_(AppKit.NSFont.systemFontOfSize_(10.5))
+        sub.setTextColor_(_white(0.7))
+        sub.setFrame_(AppKit.NSMakeRect(16, H - 62, OW - 32, 28))
+        sub.cell().setWraps_(True)
+        bg.addSubview_(sub)
+        close = AppKit.NSButton.alloc().initWithFrame_(AppKit.NSMakeRect(OW - 70, H - 36, 58, 24))
+        close.setBezelStyle_(AppKit.NSBezelStyleRounded)
+        close.setTitle_("Done")
+        close.setTarget_(self)
+        close.setAction_("close:")
+        bg.addSubview_(close)
+
+        lst_h = 2 * HEAD_H + n * ROW_H
+        self.list = OpenerList.alloc().initWithFrame_(AppKit.NSMakeRect(12, H - TOP - lst_h, OW - 24, lst_h))
+        self.list.setup(self.bot.h.opener_order(), self._apply)
+        bg.addSubview_(self.list)
+        scr = AppKit.NSScreen.mainScreen().visibleFrame()
+        p.setFrameOrigin_((scr.origin.x + (scr.size.width - OW) / 2, scr.origin.y + (scr.size.height - H) / 2))
+        self.win = p
 
     @objc.python_method
-    def _set(self, fam, on):
+    def _apply(self, order):
         h = replace(self.bot.h)
-        h.set_opener(fam, on)
+        h.openers = ",".join(order)
         h.save()
         self.bot.set_handling(h)
 
-    def show(self):
-        ws = AppKit.NSWorkspace.sharedWorkspace()
-        front = ws.frontmostApplication()
-        if front is not None and front.processIdentifier() != AppKit.NSRunningApplication.currentApplication().processIdentifier():
-            self.prev_app = front
-        for c, fam in zip(self.checks, T.FAMILY_PRIORITY):
-            c.on = self.bot.h.opener_on(fam)
-            c.setNeedsDisplay_(True)
-        AppKit.NSApp.activateIgnoringOtherApps_(True)
-        self.win.makeKeyAndOrderFront_(None)
+    def close_(self, sender):
+        self.win.orderOut_(None)
 
-    def windowWillClose_(self, note):
-        if self.prev_app is not None:
-            self.prev_app.activateWithOptions_(0)
+    def show(self):
+        self.list.order = self.bot.h.opener_order()
+        self.list.layout_rows(animate=False)
+        self.win.orderFrontRegardless()

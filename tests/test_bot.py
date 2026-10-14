@@ -670,9 +670,14 @@ def _opener_brain(bag, openers):
 
 def test_opener_toggles_and_failsafe():
     try:
-        # everything on: Jigsaw (100% build x 100% PC) wins
+        # everything on: the user's priority order decides among openers that can be built
         br = _opener_brain("SOZTJIL", "SDPC,MS2,MS,MS3,JIGSAW")
+        assert br._select_opener(core.Board(), None)[1].tmpl.family == "SDPC"
+        br = _opener_brain("SOZTJIL", "JIGSAW,SDPC,MS2,MS,MS3")
         assert br._select_opener(core.Board(), None)[1].tmpl.family == "JIGSAW"
+        # the top one can't be built for sure with this bag (O after S, Z, T): the next one
+        br = _opener_brain("SILZJTO", "SDPC,MS2")
+        assert br._select_opener(core.Board(), None)[1].tmpl.family == "MS2"
         # only SD-PC on, and SingleYou can be built with this bag: SD-PC
         br = _opener_brain("TZLJOIS", "SDPC")
         assert br._select_opener(core.Board(), None)[1].tmpl.family == "SDPC"
@@ -705,9 +710,13 @@ def test_openers_setting_round_trip(tmp_path):
     h = Handling()
     h.set_opener("MS3", False)
     h.set_opener("JIGSAW", True)
+    h.move_opener("JIGSAW", 0)                  # dragged to the top
     h.save(tmp_path / "s.json")
     h2 = Handling.load(tmp_path / "s.json")
     assert not h2.opener_on("MS3") and h2.opener_on("JIGSAW") and h2.opener_on("SDPC")
+    assert h2.opener_order() == ["JIGSAW", "JAWS", "SDPC", "MS2", "MS"]
+    h2.set_opener("MS3", True)                   # switched on: bottom of the list
+    assert h2.opener_order()[-1] == "MS3"
 
 
 def test_dpc_plans_its_pc_only_near_the_end(monkeypatch):
@@ -1104,3 +1113,27 @@ def test_advisor_mode_never_presses_keys():
     assert fake.pieces == 24 and s["pieces"] == 24
     assert s["followed"] == s["suggested"] and s["advice"].startswith("next:")
     assert s["display"]["title"]
+
+
+def test_opener_priority_order_drives_the_suggestion():
+    # MS2 and SingleYou on, SingleYou dragged above MS2: the advisor suggests SingleYou
+    # first, and switches to MS2 once the user's pieces show MS2
+    from tetrisbot.brain import Lookahead
+    from tetrisbot.coach import Coach
+    from tetrisbot.handling import Handling
+    from tetrisbot.model import SetupPrior
+
+    old = planner.SETTINGS["handling"]
+    try:
+        for order, expect in (("SDPC,MS2", "SingleYou"), ("MS2,SDPC", "Mountainous Stacking 2")):
+            h = Handling()
+            h.openers = order
+            planner.configure(h, safe=False)
+            g = sim.Game(3)
+            coach = Coach(log=lambda *a: None, lookahead=Lookahead(threaded=False), prior=SetupPrior(path=None))
+            coach.begin(g.board.copy(), g.current, g.hold, g.visible(), True)
+            assert expect in coach.brain.display["title"], (order, coach.brain.display)
+    finally:
+        planner.configure(old, safe=False)
+    coach, user, trace = _follow("MS2", "SDPC,MS2", seed=3, pieces=8)
+    assert "Mountainous Stacking 2" in trace[2][2], trace[:4]

@@ -18,7 +18,7 @@ from collections import Counter
 
 from . import core, planner, vision
 from . import templates as T
-from .brain import Brain, _rebase, enabled_openers, sibling_pool
+from .brain import Brain, _rebase, opener_priority, sibling_pool
 from .model import SetupPrior
 
 SETUP_STAGES = ("OPENER", "BAG2", "DPC", "PC2")
@@ -237,9 +237,14 @@ class Coach:
         return [h for h in (ts if t is ts.tmpl else _rebase(t, ts, board) for t in pool) if h is not None]
 
     def _rank(self, ts):
+        """Higher = more likely what the user is building: the setup already shown, then
+        the openers switched on in the user's priority order, then the learned prior."""
         t = self.brain.ts.tmpl if self.brain.ts is not None else None
-        enabled = ts.tmpl.stage not in ("bag1", "pc1_pc") or ts.tmpl.family in enabled_openers()
-        return (ts.tmpl is t, enabled, self.prior.score(ts.tmpl.name), not ts.tmpl.fallback,
+        order = opener_priority()
+        prio = 0
+        if ts.tmpl.stage in ("bag1", "pc1_pc"):
+            prio = len(order) - order.index(ts.tmpl.family) if ts.tmpl.family in order else -1
+        return (ts.tmpl is t, prio, self.prior.score(ts.tmpl.name), not ts.tmpl.fallback,
                 ts.tmpl.pc_rate or 0.0)
 
     def _recognize(self, before, piece, cells):

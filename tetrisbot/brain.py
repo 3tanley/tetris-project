@@ -32,12 +32,17 @@ def _hurry():
     return planner.SETTINGS["safe"] and not planner.background()
 
 
-def enabled_openers():
-    """Opener families switched on in the Handling window."""
+def opener_priority():
+    """Opener families switched on in the Openers window, in the user's priority order."""
     txt = getattr(planner.SETTINGS["handling"], "openers", None)
     if txt is None:
-        return set(T.FAMILY_PRIORITY)
-    return {f.strip() for f in txt.split(",") if f.strip()}
+        return list(T.FAMILY_PRIORITY)
+    return [f.strip() for f in txt.split(",") if f.strip() in T.PC_RATE]
+
+
+def enabled_openers():
+    """Opener families switched on in the Openers window."""
+    return set(opener_priority())
 _OUTLOOK = {}          # Brain._dpc_outlook results, see there
 
 
@@ -428,12 +433,13 @@ class Brain:
         return best
 
     def _select_opener(self, board, hold, min_p=0.0):
-        """Opener from the families switched on in the Handling window: the one with the
-        best chance of a perfect clear = chance to build it with these pieces x the
-        published PC chance of what follows (templates.PC_RATE).
-        Failsafe: when none of the selected openers is certain to be built with this bag,
-        the others may be used too. Last resort: a DPC build from the empty field."""
-        enabled = enabled_openers()
+        """Opener from the families switched on in the Openers window: the first one in the
+        user's priority order that is certain to be built with these pieces.
+        None certain: the one with the best chance of a perfect clear = chance to build it
+        x the published PC chance of what follows (templates.PC_RATE); failsafe: the
+        switched-off openers may be used too. Last resort: a DPC build from the empty field."""
+        order = opener_priority()
+        enabled = set(order)
         fams = {}
 
         def consider(families):
@@ -449,11 +455,17 @@ class Brain:
             sc = fams[fam][0]
             return (sc[0] * T.PC_RATE[fam], sc[1:], -T.FAMILY_PRIORITY.index(fam))
 
-        consider([f for f in T.FAMILY_PRIORITY if f in enabled])
+        consider(order)
         mine = list(fams)
         pool, why = mine, ""
         # Jaws' chance is a sampled estimate (12 futures): 0.9 counts as certain
         sure = lambda f: fams[f][0][0] >= (0.9 if f == "JAWS" else 1.0)
+        first = next((f for f in order if f in fams and sure(f)), None)
+        if first is not None:
+            n = order.index(first) + 1
+            self.log(f"[opener] {T.FAMILY_NAMES[first]}: build {fams[first][0][0]:.0%} x PC "
+                     f"{T.PC_RATE[first]:.1%} (priority {n} of {len(order)})")
+            return fams[first]
         if not any(sure(f) for f in mine):
             # failsafe: only now look at the openers that are switched off
             consider([f for f in T.FAMILY_PRIORITY if f not in enabled])

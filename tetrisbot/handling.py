@@ -28,17 +28,29 @@ class Handling:
     check_piece: bool = True   # confirm piece/ghost position before every hard drop
     gravity: str = "AUTO"      # AUTO | LOW | HIGH
     use_180: bool = True
-    # openers the bot may build (templates.FAMILY_PRIORITY names, comma separated)
+    # openers the bot may build (templates.FAMILY_PRIORITY names, comma separated), in the
+    # user's priority order (dragged in the Openers window): the first that can be built wins
     openers: str = "JAWS,SDPC,MS2,MS,MS3"
     # game mode (overlay MODES row). Only BLITZ is implemented; SPRINT / VOD are placeholders
     mode: str = "BLITZ"
 
+    def opener_order(self):
+        """Switched-on openers, highest priority first."""
+        return [f.strip() for f in self.openers.split(",") if f.strip()]
+
     def opener_on(self, fam):
-        return fam in {f.strip() for f in self.openers.split(",")}
+        return fam in self.opener_order()
 
     def set_opener(self, fam, on):
-        cur = [f.strip() for f in self.openers.split(",") if f.strip() and f.strip() != fam]
+        """Switch an opener on (it goes to the bottom of the priority list) or off."""
+        cur = [f for f in self.opener_order() if f != fam]
         self.openers = ",".join(cur + ([fam] if on else []))
+
+    def move_opener(self, fam, index):
+        """Move a switched-on opener to position `index` of the priority list."""
+        cur = [f for f in self.opener_order() if f != fam]
+        cur.insert(max(0, min(index, len(cur))), fam)
+        self.openers = ",".join(cur)
 
     # ------------------------------------------------------------ timings
     @property

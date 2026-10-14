@@ -167,14 +167,20 @@ It expects the default skin colours. Pieces in the previews are also recognised 
 
 ## Openers
 
-The overlay has four buttons: **Start/Stop**, **Openers…**, **Handling…** and **Quit**.
-**Openers…** opens a window with a switch per opener (saved in settings.json, used from the
-next opener on).
+**Openers…** on the overlay opens a translucent panel like the overlay (it doesn't take
+keyboard focus from the browser). Changes are saved in settings.json and used from the next
+opener on.
 
-* **Which one:** of the openers switched on, the one with the best chance of a perfect
-  clear: the chance to build it with the pieces in view × the published PC chance of what
-  follows (Jaws 100%, SD-PC 99.4%, MS2 98.5%, MS 97.5%, MS3 96.4% (averages of their
-  2nd-bag setups), Jigsaw 100%).
+* **ON (top):** the openers switched on, numbered in priority order. Drag a row up or down
+  to change the order. Switching an opener on puts it at the bottom of this list.
+* **OFF (bottom):** the others, in alphabetical order.
+* **Which one:** the first opener in your order that can be built for sure with the pieces
+  in view. E.g. MS2 and SingleYou on with SingleYou dragged on top: SingleYou whenever the
+  bag allows it, otherwise MS2. The advisor suggests the same one, but switches to what
+  you build as soon as your pieces show it (e.g. the first pieces of MS2).
+* **None can be built for sure:** the one with the best chance of a perfect clear: the
+  chance to build it × the published PC chance of what follows (Jaws 100%, SD-PC 99.4%,
+  MS2 98.5%, MS 97.5%, MS3 96.4% (averages of their 2nd-bag setups), Jigsaw 100%).
 * **Failsafe:** if none of the openers switched on can be built for sure with this bag (e.g.
   only SD-PC is on and the O comes after S, Z and T), it may use one that is switched off.
   The log says so: `[opener] ... - failsafe: none of the selected openers can be built`.
