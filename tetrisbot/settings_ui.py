@@ -9,8 +9,8 @@ import AppKit
 import objc
 from Foundation import NSObject
 
-from . import core, planner, templates as T
-from .handling import FRAME_MS, SDF_INF, Handling
+from . import core, keys, planner, templates as T
+from .handling import BINDINGS, FRAME_MS, SDF_INF, Handling
 
 
 def _rgb(r, g, b, a=1.0):
@@ -169,6 +169,12 @@ _BOT_SLIDERS = [
 _SPRINT_SLIDERS = [
     ("sprint_preview", "NEXT PIECES", 0, 5, "n", "", ""),   # planned pieces shown after the one in play
 ]
+_CONTROL_LABELS = {
+    "bind_left": "MOVE LEFT", "bind_right": "MOVE RIGHT", "bind_soft_drop": "SOFT DROP",
+    "bind_hard_drop": "HARD DROP", "bind_ccw": "ROTATE COUNTERCLOCKWISE", "bind_cw": "ROTATE CLOCKWISE",
+    "bind_180": "ROTATE 180", "bind_hold": "HOLD",
+}
+_CONTROL_FIELDS = [f for _, f in BINDINGS]
 
 W = 640
 
@@ -182,6 +188,8 @@ class HandlingWindow(NSObject):
         self.h = replace(bot.h)
         self.prev_app = None
         self.sliders = {}
+        self.key_buttons = {}
+        self.capturing = None       # Handling field waiting for a key press
         self._build()
         return self
 
@@ -245,7 +253,7 @@ class HandlingWindow(NSObject):
 
     @objc.python_method
     def _build(self):
-        H = 1400
+        H = 1960
         scr = AppKit.NSScreen.mainScreen().visibleFrame()
         h_vis = min(H, scr.size.height - 20)
         style = (AppKit.NSWindowStyleMaskTitled | AppKit.NSWindowStyleMaskClosable
@@ -300,7 +308,7 @@ class HandlingWindow(NSObject):
         self.segs.append(self._seg_section("gravity", "GRAVITY MODE", ["AUTO", "LOW", "HIGH"], y + 96))
         y += 192
         self.checks.append(self._check("check_piece", "CHECK GHOST BEFORE HARD DROP", y))
-        self.checks.append(self._check("use_180", "USE 180 ROTATION (X)", y + 36))
+        self.checks.append(self._check("use_180", "USE 180 ROTATION", y + 36))
         self.info = AppKit.NSTextField.wrappingLabelWithString_("")
         self.info.setFrame_(AppKit.NSMakeRect(28, y + 78, W - 56, 66))
         self.info.setFont_(AppKit.NSFont.monospacedSystemFontOfSize_weight_(11, 0))
@@ -314,9 +322,82 @@ class HandlingWindow(NSObject):
         for spec in _SPRINT_SLIDERS:
             self._slider_row(*spec, y)
             y += 58
+        y = 30 + 650 + 24 + 525 + 24 + 140 + 24
+        self._controls(y)
         self._refresh()
         # scroll to top
         self.content.scrollPoint_((0, 0))
+
+    @objc.python_method
+    def _controls(self, y):
+        """CONTROLS: one row per action; click its key, then press the new key."""
+        self._add(Box, AppKit.NSMakeRect(12, y, W - 24, 82 + 50 * len(BINDINGS)), radius=6.0,
+                  fill=C["panel"], stroke=C["border"])
+        self._label("CONTROLS", 28, y + 14, 300, 50, 46, C["title"], kern=2.5)
+        self._add(Button, AppKit.NSMakeRect(W - 150, y + 18, 122, 44), s="DEFAULTS", cb=self._default_controls)
+        y += 72
+        for f in _CONTROL_FIELDS:
+            self._add(Box, AppKit.NSMakeRect(28, y, W - 56, 44), radius=4.0, fill=C["row"])
+            self._label(_CONTROL_LABELS[f], 44, y + 10, 340, 30, 22, C["label"])
+            self.key_buttons[f] = self._add(Button, AppKit.NSMakeRect(W - 220, y + 4, 176, 36), s="",
+                                            cb=lambda f=f: self._capture(f))
+            y += 50
+        mask = AppKit.NSEventMaskKeyDown | AppKit.NSEventMaskFlagsChanged
+        self.key_monitor = AppKit.NSEvent.addLocalMonitorForEventsMatchingMask_handler_(
+            mask, lambda ev: self._key_event(ev))
+
+    @objc.python_method
+    def _show_controls(self):
+        for f, b in self.key_buttons.items():
+            b.s = "PRESS A KEY" if f == self.capturing else getattr(self.h, f).upper()
+            b.setNeedsDisplay_(True)
+
+    @objc.python_method
+    def _capture(self, field):
+        self.capturing = None if self.capturing == field else field
+        self._show_controls()
+        if self.capturing:
+            self._info("press the key bound to " + _CONTROL_LABELS[field].lower() + " in TETR.IO (esc cancels)")
+
+    @objc.python_method
+    def _key_event(self, ev):
+        """Local key monitor: while a CONTROLS row waits for a key, the key goes there."""
+        field = self.capturing
+        if field is None:
+            return ev
+        code = ev.keyCode()
+        if ev.type() == AppKit.NSEventTypeFlagsChanged:
+            flag = keys.MODIFIER_FLAGS.get(code)
+            if flag is None or not ev.modifierFlags() & flag:
+                return None                    # a modifier released, or one that isn't supported
+        elif code == 53:                       # esc
+            self.capturing = None
+            self._show_controls()
+            self._info()
+            return None
+        name = keys.KEY_NAMES.get(code)
+        if name is None:
+            self._info("that key can't be used, try another (esc cancels)")
+            return None
+        # a key does one thing: the action that had it gets this action's old key
+        old = getattr(self.h, field)
+        for f in _CONTROL_FIELDS:
+            if f != field and keys.KEYCODES[getattr(self.h, f)] == code:
+                setattr(self.h, f, old)
+        setattr(self.h, field, name)
+        self.capturing = None
+        self._show_controls()
+        self._apply()
+        return None
+
+    @objc.python_method
+    def _default_controls(self):
+        """TETR.IO's default controls."""
+        for f in _CONTROL_FIELDS:
+            setattr(self.h, f, getattr(Handling, f))
+        self.capturing = None
+        self._show_controls()
+        self._apply()
 
     # -------------------------------------------------------------- values
     @objc.python_method
@@ -345,6 +426,7 @@ class HandlingWindow(NSObject):
             c.setNeedsDisplay_(True)
         for sg in self.segs:
             sg.setNeedsDisplay_(True)
+        self._show_controls()
         self._info()
 
     @objc.python_method
@@ -411,7 +493,8 @@ class HandlingWindow(NSObject):
     @objc.python_method
     def _reset(self):
         keep = {k: getattr(self.h, k) for k in ("optimize", "key_gap_ms", "max_tap_ms", "check_piece", "gravity",
-                                                 "use_180", "openers", "mode", "sprint_preview")}
+                                                 "use_180", "openers", "mode", "sprint_preview",
+                                                 *_CONTROL_FIELDS)}
         self.h = Handling(**keep)
         for c in self.checks:
             c.on = bool(getattr(self.h, _CHECK_KEYS[self.checks.index(c)]))
@@ -445,6 +528,8 @@ class HandlingWindow(NSObject):
         self.win.makeKeyAndOrderFront_(None)
 
     def windowWillClose_(self, note):
+        self.capturing = None
+        self._show_controls()
         if self.prev_app is not None:
             self.prev_app.activateWithOptions_(0)   # give focus back to the browser
 

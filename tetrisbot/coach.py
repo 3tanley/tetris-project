@@ -283,7 +283,7 @@ class Coach(Events):
                 self.log(f"[coach] {piece} at {sorted(cells)} doesn't fit any opener switched on "
                          f"({', '.join(sorted(self._openers()))})")
                 br.ts = None
-                br._set_stage("FREE", "(not one of your openers)")
+                br._set_stage("FREE", "(not one of the selected openers)")
                 br.free_note = "doesn't match any opener switched on (" + \
                     ", ".join(T.FAMILY_NAMES[f] for f in sorted(self._openers())) + ")"
             elif ts is not None:

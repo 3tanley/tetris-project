@@ -11,3 +11,5 @@ graphify-out/cache/
 *.graphify-bak
 # Claude Code hooks with paths on this machine
 .claude/
+# per-install settings (handling, controls, openers), written by the Handling window
+settings.json

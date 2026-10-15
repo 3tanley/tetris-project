@@ -1,11 +1,11 @@
 # tetris-project
 
-Tetris project in which I develop an app that can give VOD reviews and live feedback.
+A Tetris project: an app that gives VOD reviews and live feedback for TETR.IO.
 
 ## TETR.IO Blitz bot (macOS)
 
-Plays TETR.IO **Blitz** by reading the screen and pressing your keys. It runs the
-perfect-clear loop from the three guides you picked:
+Plays TETR.IO **Blitz** by reading the screen and pressing the game's keys. It runs a
+perfect-clear loop built from three community guides:
 
 1. **Opener (bag 1):** one of the openers switched on in the Handling window (see
    [Openers](#openers)): [SingleYou](https://harddrop.com/wiki/SingleYou) (the
@@ -31,7 +31,7 @@ keeps looking for perfect clears, and goes back to the loop when the field is em
 ./setup.sh            # creates .venv and installs numpy, pillow, pyobjc
 ```
 
-macOS permissions, for the app you launch it from (Terminal, iTerm or VS Code):
+macOS permissions, for the app it is launched from (Terminal, iTerm or VS Code):
 
 * **System Settings → Privacy & Security → Accessibility**: needed to press keys.
 * **System Settings → Privacy & Security → Screen & System Audio Recording**: needed to see the board.
@@ -46,15 +46,16 @@ Restart that app after granting them.
 
 A small translucent panel appears in the top-right corner with the **MODE** row, the
 **BOT PLAYS** switch, a stats readout, **Start/Stop**, **Openers…**, **Handling…** and **Quit**.
-You can drag it anywhere. Clicking it does not take keyboard focus away from the browser.
+It can be dragged anywhere. Clicking it does not take keyboard focus away from the browser.
 
 1. Open TETR.IO Blitz so the whole board (hold, field, next queue) is visible. Any window
    size or aspect ratio works.
-2. Press **⌘⇧K** (or click Start). You can press it before or during the countdown; it
+   Before the bot plays, its controls must match the game's (see [Controls](#controls)).
+2. Press **⌘⇧K** (or click Start). It works before or during the countdown; the bot
    waits for the first piece.
-   * **BOT PLAYS off** (the default, every launch): **advisor**. You play; the bot only
-     watches and shows what you're building and where the next piece should go. No keys
-     are pressed. See [Advisor](#advisor-bot-plays-off).
+   * **BOT PLAYS off** (the default, every launch): **advisor**. The player plays; the bot
+     only watches and shows the setup being built and where the next piece should go. No
+     keys are pressed. See [Advisor](#advisor-bot-plays-off).
    * **BOT PLAYS on**: the bot plays.
 3. Press **⌘⇧K** again (or Stop) to stop it. When a game ends it waits for the next one.
 
@@ -84,34 +85,34 @@ Options (`./run_bot.command --help`):
 
 ## Advisor (BOT PLAYS off)
 
-You play; the bot reads the screen every frame and keeps up with your game.
+The player plays; the bot reads the screen every frame and keeps up with the game.
 
-* **What you're building:** every piece you lock is matched against all setups the bot
+* **What is being built:** every locked piece is matched against all setups the bot
   knows (the openers switched on in the Openers window, their 2nd-bag setups, the four.lol
   SD-PC / Jigsaw / 2nd-PC solutions, every DPC setup and DPC PC solution). Every setup that contains all
-  the pieces you've placed so far stays a candidate; the others drop out. The solve panel
-  shows the best candidate. Build the first 3 pieces of Mountainous Stacking 2 and it shows
-  "Opener: Mountainous Stacking 2" with your pieces dimmed and the rest still to place.
-* **Next placement:** the bot then plans as if it were playing, from your board, hold and
+  the pieces placed so far stays a candidate; the others drop out. The solve panel
+  shows the best candidate. After the first 3 pieces of Mountainous Stacking 2 it shows
+  "Opener: Mountainous Stacking 2" with the placed pieces dimmed and the rest still to place.
+* **Next placement:** the bot then plans as if it were playing, from the current board, hold and
   the next 5 pieces. Its best placement for the current piece is outlined in white on the
   diagram, and the status line says e.g. `next: hold T, place O`. With only 1-2 pieces
   down, many setups still fit; the status says `14 setups fit` until it's clear.
-* **DPC:** after your 8-line PC it works out the extra piece from what you placed, picks
+* **DPC:** after the 8-line PC it works out the extra piece from what was placed, picks
   the DPC setup whose four.lol order rules fit the queue, and shows it with its piece
   dependencies (`priority: J › S › O › T`). After the TSD it picks the four.lol PC solution
   the next 5 pieces can build (or its own solver) and shows that.
-* **Settings apply:** the suggestions use your Handling and Openers settings (a fresh
-  bag suggests the first opener in your order that the bag allows), and only the openers
+* **Settings apply:** the suggestions use the Handling and Openers settings (a fresh
+  bag suggests the first opener in the priority order that the bag allows), and only the openers
   switched on are recognised. Pieces that fit none of them show "Free play: doesn't match
   any opener switched on (…)", never a switched-off opener.
-* **When you leave the setup:** if a piece doesn't fit any candidate, it says so and
+* **When the player leaves the setup:** if a piece doesn't fit any candidate, it says so and
   falls back to free play (keep the stack low, look for perfect clears). When the setup it
   guessed can't be finished with the queue but another candidate still fits, it switches
   to that one.
-* **Stats:** `followed 30/36 suggestions` counts how often your piece went exactly where
-  it suggested.
+* **Stats:** `followed 30/36 suggestions` counts how often the player's piece went exactly
+  where it suggested.
 * Text over the board (ALL CLEAR, combos) is handled: rows it covers are left out of the
-  comparison while it's there, so it keeps up while you play through the banner. If a
+  comparison while it's there, so it keeps up while the game plays through the banner. If a
   board change can't be explained by one piece for 1.2 s, it re-reads the whole game.
 
 ### The model
@@ -126,16 +127,16 @@ which one is most likely.
 * **Self-play:** `--train` runs the bot in the simulator, the same number of games with
   each opener, and records which variant of each family it actually finishes, as a share
   of that family (e.g. SingleYou-A 59%, mirrored 35%, SingleYou-B 3%).
-* **You:** every setup the advisor sees you finish adds to its score (`user` in the
-  file), so over time the display leans toward the setups you actually use. Delete the
-  `user` entries in the file to forget them.
+* **The player:** every setup the advisor sees the player finish adds to its score (`user`
+  in the file), so over time the display leans toward the setups actually used. Deleting the
+  `user` entries in the file resets this.
 
-The ranking of candidates is: the one already shown, then openers you switched on, then the
+The ranking of candidates is: the one already shown, then the openers switched on, then the
 prior, then the published PC chance.
 
 ## Sprint (6-3 stacking)
 
-Pick **Sprint** in the MODE row and press ⌘⇧K. With BOT PLAYS off you play 40 lines and the
+Pick **Sprint** in the MODE row and press ⌘⇧K. With BOT PLAYS off the player plays 40 lines and the
 bot shows where each piece should go for [6-3 stacking](https://harddrop.com/wiki/Tetris_stacking);
 with BOT PLAYS on the bot plays the same plan itself (same ghost checks and corrections as
 Blitz) and stops after 40 lines. The well is **column 7**, with a 6-wide stack on its left
@@ -153,11 +154,11 @@ LLL   TTT   LLL   JJJ   OOL   JJJ
 
 A piece only goes on the 3-wide side as the next piece of one of them, placed bottom-up
 (no tucks): a block starts with J, L, O or T; S and Z only go there as the middle piece.
-If the side is already off the patterns (you stacked something else) it falls back to the
+If the side is already off the patterns (something else was stacked there) it falls back to the
 flat-stack rules below.
 
 **The panel:** in Sprint, the Solve and Next panels are replaced by one taller translucent
-panel. It shows your board (grey), the well (shaded column), the piece in play where it
+panel. It shows the board (grey), the well (shaded column), the piece in play where it
 should go (in colour, outlined in white) and the next pieces of the plan (dimmed,
 numbered 2, 3, …). How many: **Handling… → SPRINT → NEXT PIECES** (0-5, default 2). Pieces
 after a tetris are drawn where they will sit once the 4 rows are gone (the cleared rows stay
@@ -177,7 +178,7 @@ keeping the 10 best boards at each step, and scores them by these rules:
 * keep the 3-wide side level with the 6-wide side; build up to 4 ready rows
 * I: tetris once 4 rows are ready. Otherwise hold it ("keep an I in reserve") or lay it
   flat; never burn it in the well for fewer lines
-* no soft drops and the fewest key presses (your Handling settings)
+* no soft drops and the fewest key presses (with the Handling settings)
 
 In simulation, following every suggestion clears 40 lines in about 107 pieces (100 is the
 minimum) with 9-10 tetrises, ~2.95 key presses per piece and almost no soft drops; the
@@ -186,12 +187,14 @@ higher). Planning takes ~25 ms per piece with 2 shown, ~60 ms with 5.
 
 ## Handling window
 
-**Handling…** opens a copy of TETR.IO's HANDLING panel. Set it to the same values as in
-the game. Changes are saved to `settings.json` and apply right away, even mid-game.
+**Handling…** opens a copy of TETR.IO's HANDLING panel. It should hold the same values as
+the game. Changes are saved to `settings.json` and apply right away, even mid-game. The file is
+created on the first change and is not tracked by git, so every install keeps its own
+settings.
 
 * **SPRINT → NEXT PIECES** (0-5): how many planned pieces the Sprint panel shows after the
   piece in play.
-* **Taps** are held for 75% of your DAS, up to MAX TAP (e.g. DAS 10 ms → 7.5 ms). Holding a
+* **Taps** are held for 75% of DAS, up to MAX TAP (e.g. DAS 10 ms → 7.5 ms). Holding a
   key for the full DAS would start auto-shift.
 * **DAS moves** ("hold left until the wall") are held for DAS + DCD (+ ARR × 9 if ARR > 0)
   plus one frame.
@@ -218,9 +221,32 @@ the game. Changes are saved to `settings.json` and apply right away, even mid-ga
   are ignored. A board mismatch must show on two pieces in a row before it resyncs.
 * **TEST** shows the key sequences the current settings produce.
 
-Controls (from your screenshot): J/L move, K soft drop, Space hard drop, Z/C/X rotate
-CCW/CW/180, Left Shift hold. To change keys, edit `DEFAULT_BINDINGS` in `tetrisbot/keys.py`.
-It expects the default skin colours. Pieces in the previews are also recognised by shape.
+Vision expects the default skin colours. Pieces in the previews are also recognised by shape.
+
+## Controls
+
+The bot presses the same keys the game is bound to, so its controls must match TETR.IO's
+**CONFIG → CONTROLS**. They are set in **Handling… → CONTROLS**: click the key next to an
+action, then press the new key (Esc cancels). A key already used by another action is
+swapped onto that action, so no two actions share a key. **DEFAULTS** restores TETR.IO's
+default controls. Changes are saved to `settings.json` and apply right away.
+
+| action | setting | TETR.IO default |
+|---|---|---|
+| move left | `bind_left` | `left` |
+| move right | `bind_right` | `right` |
+| soft drop | `bind_soft_drop` | `down` |
+| hard drop | `bind_hard_drop` | `space` |
+| rotate counterclockwise | `bind_ccw` | `z` |
+| rotate clockwise | `bind_cw` | `up` |
+| rotate 180 | `bind_180` | `a` |
+| hold | `bind_hold` | `c` |
+
+The same names can be edited in `settings.json` directly: letters, digits, punctuation,
+`space`, `tab`, `return`, `backspace`, the arrow keys (`left`, `right`, `up`, `down`) and
+`lshift`, `rshift`, `lctrl`, `rctrl`, `loption`, `roption` (the full list is `KEYCODES` in
+`tetrisbot/keys.py`). An unknown name falls back to the default, with a message in the log.
+TETR.IO allows two keys per action; the bot only needs one of them.
 
 ## Openers
 
@@ -231,10 +257,10 @@ opener on.
 * **ON (top):** the openers switched on, numbered in priority order. Drag a row up or down
   to change the order. Switching an opener on puts it at the bottom of this list.
 * **OFF (bottom):** the others, in alphabetical order.
-* **Which one:** the first opener in your order that can be built for sure with the pieces
+* **Which one:** the first opener in the priority order that can be built for sure with the pieces
   in view. E.g. MS2 and SingleYou on with SingleYou dragged on top: SingleYou whenever the
   bag allows it, otherwise MS2. The advisor suggests the same one, but switches to what
-  you build as soon as your pieces show it (e.g. the first pieces of MS2).
+  the player builds as soon as the placed pieces show it (e.g. the first pieces of MS2).
 * **None can be built for sure:** the one with the best chance of a perfect clear: the
   chance to build it × the published PC chance of what follows (Jaws 100%, SD-PC 99.4%,
   MS2 98.5%, MS 97.5%, MS3 96.4% (averages of their 2nd-bag setups), Jigsaw 100%).
@@ -255,7 +281,7 @@ From [four.lol ILSZ](https://four.lol/perfect-clears/ILSZ) and
   far right: 92.26%, 100% if the O is among the first 3 pieces of bag 2) and 15 for
   **ILJOSZ** (J and O placed next to it: 58.33%). Two of four.lol's 33 ILOSZ solutions draw a
   piece across a row that clears first and are left out, like such DPC solutions. The
-  panel names the field from where your O / J are ("Jaws (ILOSZ)"). The bot commits to a
+  panel names the field from where the O / J are ("Jaws (ILOSZ)"). The bot commits to a
   solution once the visible pieces can finish it, preferring the one whose 4 leftover
   pieces have the best 2nd PC pattern.
 * **Sequence search:** four.lol's "Solution Search for ILSZ" (605 solutions by piece order)
@@ -422,8 +448,8 @@ is done, the solve is used immediately with no search.
 * Before every hard drop the ghost must sit exactly on the planned cells (or the piece
   itself must, after a soft drop).
 
-**Queue pieces are identified by colour and shape.** Colour first, learned for your skin
-while playing, and confirmed by shape. A clearly identified colour wins when the shape
+**Queue pieces are identified by colour and shape.** Colour first, learned for the skin in
+use while playing, and confirmed by shape. A clearly identified colour wins when the shape
 reading is broken.
 
 ## Solve panel
@@ -456,7 +482,7 @@ the same setups flipped (e.g. JO appears as LO), and the bot logs whichever orie
 | file | role |
 |---|---|
 | `tetrisbot/core.py` | rules: pieces, TETR.IO SRS+ kicks (incl. 180), T-spin detection, cost-based (finesse/speed) move search producing exact key sequences |
-| `tetrisbot/handling.py`, `settings_ui.py` | handling settings → key timings, and the HANDLING window |
+| `tetrisbot/handling.py`, `settings_ui.py` | handling and control settings → key timings and bindings, and the HANDLING window |
 | `tetrisbot/setups_wiki.py` | SingleYou / MS / MS2 / MS3 diagrams, extracted by script from the Hard Drop wiki source |
 | `tetrisbot/setups_jigsaw.py` | Jigsaw PC loop: bag 1/2 builds, 3rd-bag PCs, early-PC solves (Hard Drop wiki) |
 | `tetrisbot/setups_fourlol_sdpc.py` | four.lol SD-PC data: its 8-line PC solutions |
@@ -466,9 +492,9 @@ the same setups flipped (e.g. JO appears as LO), and the bot logs whichever orie
 | `tetrisbot/brain.py` | stage machine (opener → bag 2 → PC → DPC → PC → …) and 7-bag tracking |
 | `tetrisbot/vision.py` | finds the board by its white frame at any scale; reads the field, next queue and hold |
 | `tetrisbot/controller.py` | live loop: read screen → decide → press keys → verify → resync if needed |
-| `tetrisbot/app.py`, `hotkey.py`, `keys.py` | overlay panel, global ⌘⇧K, synthetic key presses |
-| `tetrisbot/coach.py` | advisor: Watcher (screen frames → "piece spawned" / "piece locked" events) and Coach (recognises the setup, keeps a Brain in step with the user's game) |
-| `tetrisbot/sprint.py` | Sprint mode: 6-3 stacking rules, the 3-wide patterns, the plan search, SprintCoach (follows the user's game through the same Watcher) and SprintBrain (BOT PLAYS) |
+| `tetrisbot/app.py`, `hotkey.py`, `keys.py` | overlay panel, global ⌘⇧K, synthetic key presses and the key names used by the controls |
+| `tetrisbot/coach.py` | advisor: Watcher (screen frames → "piece spawned" / "piece locked" events) and Coach (recognises the setup, keeps a Brain in step with the player's game) |
+| `tetrisbot/sprint.py` | Sprint mode: 6-3 stacking rules, the 3-wide patterns, the plan search, SprintCoach (follows the player's game through the same Watcher) and SprintBrain (BOT PLAYS) |
 | `tetrisbot/model.py`, `model/setup_prior.json` | the advisor's learned setup prior and its self-play training |
 | `tetrisbot/sim.py`, `tests/` | headless simulator and tests (including a fake TETR.IO screen) |
 

@@ -4,6 +4,8 @@ import json
 import os
 from dataclasses import asdict, dataclass, fields
 
+from . import core
+
 FRAME_MS = 1000.0 / 60.0
 SDF_INF = 41                  # TETR.IO shows SDF 41 as "∞"
 PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "settings.json")
@@ -11,7 +13,7 @@ PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
 
 @dataclass
 class Handling:
-    # --- TETR.IO handling (defaults = the user's screenshot)
+    # --- TETR.IO handling (CONFIG → HANDLING)
     arr_ms: float = 0.0
     das_ms: float = 110.0
     dcd_ms: float = 0.0
@@ -28,13 +30,27 @@ class Handling:
     check_piece: bool = True   # confirm piece/ghost position before every hard drop
     gravity: str = "AUTO"      # AUTO | LOW | HIGH
     use_180: bool = True
-    # openers the bot may build (templates.FAMILY_PRIORITY names, comma separated), in the
-    # user's priority order (dragged in the Openers window): the first that can be built wins
+    # openers the bot may build (templates.FAMILY_PRIORITY names, comma separated), in
+    # priority order (dragged in the Openers window): the first that can be built wins
     openers: str = "JAWS,SDPC,MS2,MS,MS3"
     # game mode (overlay MODES row): BLITZ | SPRINT (VOD is a placeholder)
     mode: str = "BLITZ"
     # Sprint panel: planned pieces shown after the one in play (0-5, settings SPRINT slider)
     sprint_preview: int = 2
+    # --- controls: the keys bound in TETR.IO (CONFIG → CONTROLS), names from keys.KEYCODES.
+    # Defaults are TETR.IO's own defaults.
+    bind_left: str = "left"
+    bind_right: str = "right"
+    bind_soft_drop: str = "down"
+    bind_hard_drop: str = "space"
+    bind_ccw: str = "z"
+    bind_cw: str = "up"
+    bind_180: str = "a"
+    bind_hold: str = "c"
+
+    def bindings(self):
+        """Planner action -> key name."""
+        return {action: getattr(self, f) for action, f in BINDINGS}
 
     def opener_order(self):
         """Switched-on openers, highest priority first."""
@@ -107,7 +123,25 @@ class Handling:
                     setattr(h, k, v)
         except (OSError, ValueError):
             pass
+        from .keys import KEYCODES          # needs Quartz, so only imported here
+        for _, f in BINDINGS:
+            if getattr(h, f) not in KEYCODES:
+                print(f"settings.json: unknown key {getattr(h, f)!r} for {f}, using the default")
+                setattr(h, f, getattr(cls, f))
         return h
+
+
+# Planner action -> the Handling field with its key, in the order the CONTROLS section shows them.
+BINDINGS = [
+    (core.LEFT, "bind_left"),
+    (core.RIGHT, "bind_right"),
+    (core.SOFT, "bind_soft_drop"),
+    (core.HARD, "bind_hard_drop"),
+    (core.CCW, "bind_ccw"),
+    (core.CW, "bind_cw"),
+    (core.R180, "bind_180"),
+    (core.HOLD, "bind_hold"),
+]
 
 
 def ms_to_frames(ms):

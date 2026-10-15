@@ -1355,3 +1355,22 @@ def test_sprint_mode_switch_uses_sprint_coach():
     assert s["sprint"] and s["lines"] == 0 and s["advice"] == "waiting for a game"
     bot.set_handling(replace(bot.h, mode="BLITZ"))
     assert "sprint" not in bot.status()
+
+
+def test_controls_from_settings(tmp_path):
+    """Key bindings come from settings.json, bad names fall back to TETR.IO's defaults,
+    and the keyboard picks up changed bindings with new handling settings."""
+    import json
+    from dataclasses import replace
+    from tetrisbot.handling import Handling
+    from tetrisbot.keys import KEYCODES, Keyboard
+    p = tmp_path / "settings.json"
+    p.write_text(json.dumps({"bind_left": "j", "bind_hold": "lshift", "bind_cw": "nope"}))
+    h = Handling.load(str(p))
+    b = h.bindings()
+    assert b[core.LEFT] == "j" and b[core.HOLD] == "lshift"
+    assert b[core.CW] == "up" and b[core.HARD] == "space"      # unknown name / not set -> default
+    kb = Keyboard(h)
+    assert kb.codes[core.DAS_LEFT] == kb.codes[core.LEFT] == KEYCODES["j"]
+    kb.h = replace(h, bind_left="left", bind_right="d")
+    assert kb.codes[core.DAS_LEFT] == KEYCODES["left"] and kb.codes[core.DAS_RIGHT] == KEYCODES["d"]
