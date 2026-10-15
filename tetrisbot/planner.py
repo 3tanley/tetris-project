@@ -703,24 +703,39 @@ def find_pc(board, seq, hold, max_h=6, time_limit=1.5):
 
 
 # ------------------------------------------------------------ heuristic play
+def holes_covered(board, hs):
+    """(holes, covered): empty cells under a column's top, and how many blocks sit on
+    top of each one. Row by row from the top, with a mask of the columns already roofed."""
+    rows = board.rows
+    holes = covered = 0
+    roofed = 0
+    for y in range(max(hs) - 1, -1, -1):
+        gaps = roofed & ~rows[y]
+        while gaps:
+            low = gaps & -gaps
+            holes += 1
+            covered += hs[low.bit_length() - 1] - y
+            gaps ^= low
+        roofed |= rows[y]
+    return holes, covered
+
+
 def evaluate(board, lines, spin):
     hs = board.col_heights()
-    holes = 0
-    covered = 0
-    for x in range(core.W):
-        seen = False
-        for y in range(hs[x] - 1, -1, -1):
-            if board.rows[y] >> x & 1:
-                seen = True
-            elif seen:
-                holes += 1
-                covered += hs[x] - y
-    bump = sum(abs(hs[i] - hs[i + 1]) for i in range(core.W - 1))
+    holes, covered = holes_covered(board, hs)
     maxh = max(hs)
     agg = sum(hs)
     # deepest well is fine (one column for I / T-spins), others penalised
-    wells = sorted((min(hs[x - 1] if x > 0 else 99, hs[x + 1] if x < 9 else 99) - hs[x]) for x in range(core.W))
-    well_pen = sum(max(0, w) for w in wells[:-1])
+    bump = well_pen = deepest = 0
+    for x in range(core.W):
+        right = hs[x + 1] if x < 9 else 99
+        if x < 9:
+            bump += abs(hs[x] - right)
+        w = min(hs[x - 1] if x > 0 else 99, right) - hs[x]
+        if w > 0:
+            well_pen += w
+            deepest = max(deepest, w)
+    well_pen -= deepest
     score = -4.0 * holes - 0.6 * covered - 0.35 * bump - 0.25 * agg - 0.8 * well_pen
     score -= 2.0 * max(0, maxh - 10) ** 1.5
     if board.rows[0] == 0 and lines:

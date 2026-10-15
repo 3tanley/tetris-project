@@ -147,11 +147,18 @@ class Board:
 
     def col_heights(self):
         hs = [0] * W
+        rows = self.rows
+        left = FULL                    # columns whose top block hasn't been seen yet
         for y in range(self.height() - 1, -1, -1):
-            r = self.rows[y]
-            for x in range(W):
-                if hs[x] == 0 and r >> x & 1:
-                    hs[x] = y + 1
+            r = rows[y] & left
+            if r:
+                left ^= r
+                while r:
+                    low = r & -r
+                    hs[low.bit_length() - 1] = y + 1
+                    r ^= low
+                if not left:
+                    break
         return hs
 
     def count(self):

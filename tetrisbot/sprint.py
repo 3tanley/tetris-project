@@ -45,7 +45,7 @@ def depth_for(preview):
     return 1 + max(DEPTH - 1, min(5, preview))
 
 
-# The 3-wide side, from the user's screenshot: every 4 rows of it are one of these
+# The 3-wide side: every 4 rows of it are one of these
 # patterns (rows top -> bottom, the well side on the left), 3 pieces each, placed
 # bottom-up without tucks.
 RIGHT_PATTERNS = [
@@ -119,6 +119,10 @@ for _p in "IJLOSTZ":
         prof = tuple(min(y for x, y in cs if x == cx) - y0 for cx in range(x0, max(c[0] for c in cs) + 1))
         seen.add(prof)
     _PROFILES[_p] = sorted(seen)
+# the same profiles as height steps between neighbouring columns: a piece fits at x when
+# hs[x+1]-hs[x], hs[x+2]-hs[x+1], ... equal its profile's steps
+_STEPS = {_p: frozenset(tuple(pr[i + 1] - pr[i] for i in range(len(pr) - 1)) for pr in profs)
+          for _p, profs in _PROFILES.items()}
 _FIT_WEIGHT = {"S": 1.5, "Z": 1.5, "O": 1.2, "T": 0.8, "J": 0.8, "L": 0.8}
 
 
@@ -130,17 +134,22 @@ def ready_rows(board):
     return n
 
 
-def _fits(hs, piece, regions=(LEFT, RIGHT)):
+def _windows(hs, regions):
+    """Every run of 0-3 height steps inside the regions (pieces are 1-4 columns wide)."""
+    out = set()
+    for region in regions:
+        steps = [hs[x + 1] - hs[x] for x in range(region[0], region[-1])]
+        for w in range(4):
+            for i in range(len(steps) - w + 1):
+                out.add(tuple(steps[i:i + w]))
+    return out
+
+
+def _fits(hs, piece, regions=(LEFT, RIGHT), windows=None):
     """Can `piece` go somewhere without a hole and without touching the well?"""
-    for prof in _PROFILES[piece]:
-        w = len(prof)
-        for region in regions:
-            lo, hi = region[0], region[-1]
-            for x in range(lo, hi - w + 2):
-                base = hs[x] - prof[0]
-                if all(hs[x + i] - prof[i] == base for i in range(1, w)):
-                    return True
-    return False
+    if windows is None:
+        windows = _windows(hs, regions)
+    return not _STEPS[piece].isdisjoint(windows)
 
 
 def right_blocks(board, base=0, hs=None):
@@ -171,15 +180,7 @@ def align(board):
 def evaluate(board, hold=None, base=0):
     """Board quality for 6-3 stacking (higher = better). `base`: see align()."""
     hs = board.col_heights()
-    holes = covered = 0
-    for x in range(core.W):
-        seen = False
-        for y in range(hs[x] - 1, -1, -1):
-            if board.rows[y] >> x & 1:
-                seen = True
-            elif seen:
-                holes += 1
-                covered += hs[x] - y
+    holes, covered = planner.holes_covered(board, hs)
     in_well = sum(board.rows[y] >> WELL & 1 for y in range(hs[WELL]))
     bump = sum(abs(hs[i] - hs[i + 1]) for i in range(LEFT[0], LEFT[-1]))
     # the 3-wide side follows the patterns; only once it is off them (the user stacked
@@ -208,8 +209,9 @@ def evaluate(board, hold=None, base=0):
              - BALANCE * abs(left_avg - right_avg) + 1.2 * min(ready, 4) + 0.2 * max(0, ready - 4))
     score -= 0.8 * max(0, maxh - 9) + 0.5 * max(0, maxh - 13) ** 2
     score -= OFF_PATTERN * off
+    windows = _windows(hs, regions)
     score -= sum(w for p, w in _FIT_WEIGHT.items()
-                 if not (_fits(hs, p, regions) or (not off and p in right_next)))
+                 if not (_fits(hs, p, windows=windows) or (not off and p in right_next)))
     if hold == "I":
         score += 1.5                         # an I in reserve
     return score
