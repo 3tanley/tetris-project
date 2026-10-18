@@ -37,6 +37,10 @@ def fit_placement(before, after, pieces, unk=None):
     unk = unk or [0] * core.H
     added = [(x, y) for y in range(core.H) for x in range(core.W) if after.filled(x, y) and not before.filled(x, y)]
     if len(added) == 4 and not any(unk) and all(before.rows[y] | after.rows[y] == after.rows[y] for y in range(core.H)):
+        # a piece in the air isn't locked (2026-10-18: an L moved at the top, then held,
+        # was taken as locked at rows 16-17)
+        if not any(cy == 0 or before.filled(cx, cy - 1) for cx, cy in added):
+            return None
         for p in pieces:                                   # no line clear: the new cells are the piece
             for x, y, r in core.identify(p, added):
                 b = before.copy()

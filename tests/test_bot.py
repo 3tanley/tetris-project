@@ -1028,6 +1028,18 @@ def test_fit_placement_with_line_clear():
     assert p == "I" and len(cleared) == 2 and b == after
 
 
+def test_fit_placement_ignores_a_piece_in_the_air():
+    """2026-10-18 recording: an L the user moved near the top (then held) was read as
+    locked at rows 16-17 - a lock must rest on the floor or the stack."""
+    from tetrisbot.coach import fit_placement
+    floating = core.Board()
+    floating.place_cells([(6, 16), (6, 17), (7, 17), (8, 17)])
+    assert fit_placement(core.Board(), floating, ["L"]) is None
+    landed = core.Board()
+    landed.place_cells(core.cells_of("L", 2, 7, 1))
+    assert fit_placement(core.Board(), landed, ["L"])[0] == "L"
+
+
 def test_watcher_follows_the_screen():
     # the user plays on the fake TETR.IO screen (ALL CLEAR banners, line clear delay,
     # screen lag); the watcher must explain every lock without re-reading the game
@@ -1400,6 +1412,19 @@ def test_all_pc_counts_the_loop_from_the_bag():
         for used, n in ((10, 2), (20, 3), (7, 1), (14, 1)):
             br.placed = set(range(used))
             assert br.pc_no() == n, (used, br.pc_no())
+        # 2026-10-18 recording: Jaws ended with bag 1's T in hold (bag 2's T placed) - still
+        # the 2nd PC with I J T Z left, not the 3rd PC with only the T
+        br.placed = {0, 1, 2, 3, 4, 6, 7, 8, 9, 11}
+        assert br.pc_no() == 2 and br._bag_leftover() == list("IJTZ")
+        br.placed = set()
+        assert br.unplaced_in_open_bag() == 0       # game start: a fresh bag, not "mid-bag"
+        # PC endings are scored by whether the next PC's setup can be built: 2nd PC ended
+        # with the extra J in hold and another J next - none of the 3rd PC setups fit
+        br.bag.history = list("ILSZOTJ" "OSLJTZI" "SOJLITZ" "JOIZLST")
+        br.placed, br.cur_index, br.hold_index = set(range(21)) - {16}, 21, 16
+        sc, text = br._dpc_outlook(br, "J")
+        assert sc[1] == 0 and text.startswith("3rd PC setup next (0%)"), text
+        br.bag.history = list("ILSZOTJ" "OSLJTZI" "SOJLITZ" "TZOSLIJ")
         br.placed, br.stage = set(range(20)), "PC8"
         br.empty_field_stage(core.Board())
         assert br.stage == "PC2"                    # the DPC is only used outside ALL PC

@@ -254,7 +254,8 @@ class Bot:
                     if self._wait(1000):
                         break
                     continue
-                self.log(f"Board found: {self.geo}")
+                self.log(f"Board found: {self.geo} - openers {self.h.openers}"
+                         + (", ALL PC on" if self.h.all_pc else ""))
                 if self.autoplay:
                     self._play_one_game()
                 else:

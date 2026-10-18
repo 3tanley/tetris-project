@@ -821,7 +821,12 @@ class OpenersWindow(NSObject):
 
     @objc.python_method
     def _show_all_pc(self):
-        self.allpc.setState_(AppKit.NSControlStateValueOn if self.bot.h.all_pc else AppKit.NSControlStateValueOff)
+        on = self.bot.h.all_pc
+        self.allpc.setState_(AppKit.NSControlStateValueOn if on else AppKit.NSControlStateValueOff)
+        # the on/off bezel barely differs on the HUD background: in the 2026-10-18 recording
+        # a click meant to switch ALL PC on switched it off
+        self.allpc.setTitle_("ALL PC ✓" if on else "ALL PC")
+        self.allpc.setBezelColor_(AppKit.NSColor.systemGreenColor() if on else None)
 
     def close_(self, sender):
         self.win.orderOut_(None)

@@ -552,7 +552,7 @@ class Brain:
         # Jaws is only available at a fresh bag with an empty hold: a carried piece or a
         # half-used bag forces pieces into solve spots before the bag shows which solve
         # works (in simulation 0 of 4 clean starts failed, 14 of 24 other starts did)
-        if hold is not None or self.unplaced_in_open_bag() not in (0, 7):
+        if hold is not None or self.unplaced_in_open_bag() != 0:
             return None
         if _hurry() and (self.lookahead is None or not self.lookahead.is_warm(T.openers(["JAWS"]))):
             # high gravity and Jaws not precomputed yet: choosing it would take ~1 s here
@@ -671,7 +671,7 @@ class Brain:
             build = [c for c in cands.values() if c["build"]]
             pool = build if (JAWS_BUILD_FIRST and build) else list(cands.values())
             # high gravity, bot thread: no time to sample futures - most solves still fitting
-            futures = [] if len(pool) == 1 or _hurry() else self._jaws_futures(max(len(t.remaining) for t in sibs))[:8]
+            futures = [] if len(pool) == 1 or _hurry() else self._jaws_futures(max(len(t.remaining) for t in sibs))
             best = None
             for c in pool:
                 nb = board.copy()
@@ -700,12 +700,14 @@ class Brain:
     def _bag_leftover(self):
         """Types of the pieces of the oldest open bag that are still to be placed (the 4
         pieces of bag 2 after a Jaws 1st PC). None if the bag position is unknown."""
-        ob = self._open_bag()
-        if ob is None:
+        off, h = self.bag.offset, self.bag.history
+        if off is None:
             return None
-        _, _, unplaced, unseen = ob
-        h = self.bag.history
-        return sorted([h[i] for i in unplaced] + list(unseen))
+        # the bag boundary that unplaced_in_open_bag counts to
+        end = off + 7 * (sum(1 for i in self.placed if i >= off) // 7 + 1)
+        left = [h[i] for i in range(off, min(end, len(h))) if i not in self.placed]
+        unseen = sorted(ALL - set(h[end - 7:end])) if end > len(h) else []
+        return sorted(left + unseen)
 
     def _candidates(self):
         if self.stage == "OPENER":
@@ -735,14 +737,13 @@ class Brain:
         return k, start, [], sorted(ALL)
 
     def unplaced_in_open_bag(self):
-        """Pieces of the oldest open bag not placed yet (0 = exactly at a bag boundary)."""
-        ob = self._open_bag()
-        if ob is None:
+        """Pieces still to place before the next bag boundary (0 = exactly at one), counted
+        from the number placed: a piece of an older bag kept in hold doesn't move the loop
+        position (Jaws ending with bag 1's T in hold is still the 2nd PC, not the 3rd)."""
+        off = self.bag.offset
+        if off is None:
             return -1
-        _, start, unplaced, unseen = ob
-        if start >= len(self.bag.history) and len(unseen) == 7:
-            return 0
-        return len(unplaced) + len(unseen)
+        return -sum(1 for i in self.placed if i >= off) % 7
 
     def extra_piece(self, avail=None):
         """The DPC "extra" piece: the one piece of an earlier bag that was never placed.
@@ -1093,10 +1094,13 @@ class Brain:
         if n == 0:
             return (1, 0.5, ""), "fresh bag -> opener next"
         if n > 0 and (extra is None or all_pc()):
-            # four.lol's setup for the next PC of the loop: with the hold free, a piece no
-            # setup uses can wait there (with it taken, often no setup can be built)
-            return (1, 0.4 if hold is None else 0.1, ""), \
-                f"{T.ORDINAL[PC_NO[n % 7]]} PC setup next, hold {hold or 'free'}"
+            # four.lol's setup for the next PC of the loop: can one be built with the pieces
+            # in view? (with the hold taken, often none can - 2026-10-18 recording: 2nd PC
+            # left the extra J in hold, J next, and none of the 48 3rd PC setups fit)
+            best = br._select_pc_setup(core.Board(), hold)
+            p = best[0][0] if best else 0.0
+            return (2 if p >= 1 else 1, p, ""), \
+                f"{T.ORDINAL[PC_NO[n % 7]]} PC setup next ({p:.0%}), hold {hold or 'free'}"
         if extra is None:
             return (0, 0.0, ""), f"{n} pieces left in the bag (no opener/DPC fits)"
         seq = br._seq()
