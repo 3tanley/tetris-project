@@ -33,6 +33,8 @@ class Handling:
     # openers the bot may build (templates.FAMILY_PRIORITY names, comma separated), in
     # priority order (dragged in the Openers window): the first that can be built wins
     openers: str = "JAWS,SDPC,MS2,MS,MS3"
+    # ALL PC (Openers window): Jaws, then four.lol's 2nd-7th PCs in a loop, back to Jaws
+    all_pc: bool = False
     # game mode (overlay MODES row): BLITZ | SPRINT (VOD is a placeholder)
     mode: str = "BLITZ"
     # Sprint panel: planned pieces shown after the one in play (0-5, settings SPRINT slider)

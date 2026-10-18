@@ -386,7 +386,7 @@ class Bot:
                 if ncur_f == self.pre["cur"]:
                     self.pre["queue"] = nqueue_f
             plan_after = self.pre["deferred"] or self._mode_changed(self.pre)
-            if plan_after and not (res == "ok" and self.confirm_resting):
+            if plan_after and not self.pre.get("after_drop") and not (res == "ok" and self.confirm_resting):
                 # piece still in the air: plan the next one now, drop after
                 self.pre = self._preplan(step, cur, queue, True)
                 plan_after = False
@@ -491,11 +491,16 @@ class Bot:
         out = dict(board=nb, brain=nbrain, cur=ncur, queue=nqueue, hold=nhold, step=None, deferred=False,
                    cleared=len(ncleared))
         # a new setup / PC choice (free play looks for PCs every piece while the field is
-        # low) should see the queue piece this piece's spawn reveals
+        # low) should see the queue piece this piece's spawn reveals. A search for a PC in
+        # view during a setup may take a while: only after this piece is hard dropped.
+        pc_due = False
+        if ncur and not self.sprint():
+            nbrain.bag.update(nbrain.cur_index, ncur, nqueue)     # as decide() will: same pieces in view
+            pc_due = nbrain.pc_check_due(nb, nhold)
         choosing = not self.sprint() and nbrain.ts is None and not nbrain.plan and (
             nbrain.stage != "FREE" or (0 < nb.height() <= 6 and not planner.SETTINGS["safe"]))
-        if choosing and not final:
-            out["deferred"] = True
+        if (choosing or pc_due) and not final:
+            out["deferred"], out["after_drop"] = True, pc_due
             return out
         out["step"] = self._decide(nbrain, nb, ncur, nhold, nqueue) if ncur else None
         out["mode"] = (planner.SETTINGS["safe"], planner._air_ms(nb))
@@ -708,7 +713,8 @@ class Bot:
                 if self.cfg["verify_board"] and not checked:
                     checked = True
                     self._verify(img, act)
-                if getattr(self, "pre", None) and self.pre["deferred"] and not self.resynced and not resting:
+                if getattr(self, "pre", None) and self.pre["deferred"] and not self.pre.get("after_drop") \
+                        and not self.resynced and not resting:
                     # still in the air: use the wait to plan the next piece
                     t_plan = time.time()
                     full = ([queue[0]] + q) if (step.hold and self.hold is None) else q

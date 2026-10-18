@@ -32,8 +32,20 @@ def _hurry():
     return planner.SETTINGS["safe"] and not planner.background()
 
 
+def all_pc():
+    """ALL PC mode (Openers window): Jaws, then four.lol's 2nd-7th PCs, looped."""
+    return getattr(planner.SETTINGS["handling"], "all_pc", False)
+
+
+# a 4-line PC uses 10 pieces, a bag has 7: the pieces of the oldest bag still unplaced
+# after a PC say which PC of the loop comes next
+PC_NO = {0: 1, 4: 2, 1: 3, 5: 4, 2: 5, 6: 6, 3: 7}
+
+
 def opener_priority():
     """Opener families switched on in the Openers window, in the user's priority order."""
+    if all_pc():
+        return ["JAWS"]
     txt = getattr(planner.SETTINGS["handling"], "openers", None)
     if txt is None:
         return list(T.FAMILY_PRIORITY)
@@ -469,7 +481,8 @@ class Brain:
             return fams[first]
         if not any(sure(f) for f in mine):
             # failsafe: only now look at the openers that are switched off
-            consider([f for f in T.FAMILY_PRIORITY if f not in enabled])
+            # (ALL PC: only Jigsaw - its build leads to a 4-line 1st PC, or a sure 8-line one)
+            consider([f for f in T.FAMILY_PRIORITY if f not in enabled and (not all_pc() or f == "JIGSAW")])
             pool = list(fams)
             if set(pool) != set(mine):
                 why = " - failsafe: none of the selected openers can be built with this bag"
@@ -778,6 +791,37 @@ class Brain:
             self.log(f"[dpc] -> {best[1].tmpl.label} ({best[1].tmpl.name})")
         return best
 
+    def _select_pc_setup(self, board, hold):
+        """four.lol setup for the next PC of the 4-line loop. Ranked by how many of the
+        pieces left of the last bag it uses (four.lol draws each setup for those), then
+        build chance x published PC chance. Setups may need up to 2 pieces not in view
+        yet (the 5th PC's are 5-7 pieces); candidates are tried best-first and the search
+        stops once no later one can beat the best found."""
+        n = self.pc_n = self.pc_no()
+        seq = self._seq()
+        have = Counter(([hold] if hold else []) + seq)
+        left = self._bag_leftover()
+        lc = Counter(left or ())
+        pool = T.pc2_setups(n)
+        cands = []
+        for t in pool:
+            need = Counter(t.types())
+            if sum((need - have).values()) <= 2:
+                cands.append((sum((need & lc).values()), t.pc_rate or 0.0, t))
+        cands.sort(key=lambda c: (-c[0], -c[1]))
+        if _hurry():
+            cands = cands[:6]               # high gravity: the piece is already falling
+        self.log(f"[pc{n or ''}] left of this bag: {''.join(left) if left else '?'}; "
+                 f"{len(cands)} of {len(pool)} {T.ORDINAL.get(n, '')} PC setups fit the pieces in view")
+        best = None
+        for overlap, rate, t in cands:
+            if best is not None and (overlap, rate) <= best[0]:
+                break                       # p <= 1: nothing further down can win
+            b = self._select([t], board, hold)
+            if b and (best is None or (overlap, b[0][0] * rate) > best[0]):
+                best = ((overlap, b[0][0] * rate), b)
+        return best[1] if best else None
+
     def _select_pc8(self, board, hold):
         """8-line PC after the 2nd bag, from the family's known solutions (four.lol SD-PC,
         Jigsaw 3rd bag). Among those the next pieces can build, prefer the one leaving the
@@ -804,23 +848,25 @@ class Brain:
         self.log(f"[pc] {best[1].tmpl.label} (four.lol) fits; then {best[3]}")
         return ((1.0, 0), best[1], best[2])
 
-    def _select_dpc_pc(self, board, hold):
-        """Choose which of four.lol's PC solutions the next pieces can build."""
+    def _select_dpc_pc(self, board, hold, tmpls=None):
+        """Choose which of four.lol's PC solutions (default: the DPC ones) the next pieces
+        can build."""
         seq = self._seq()
         marks, best = [], None
-        for prio, tm in enumerate(T.dpc_solutions()):
+        for prio, tm in enumerate(T.dpc_solutions() if tmpls is None else tmpls):
             ts = T.TState.fresh_on(tm, board)
             if ts is None:
                 continue
             p, steps = self._chance(ts, board, hold)
-            marks.append(tm.name[3:] + ("✓" if p >= 1 else "?" if p > 0 else "✗"))
+            marks.append(tm.name[tm.name.index("-") + 1:] + ("✓" if p >= 1 else "?" if p > 0 else "✗"))
             if steps and p > 0:
                 spins = sum(1 for st in steps if st.slot and ts.tmpl.slots[st.slot].spin and st.pl.spin == "full")
                 score = (p, spins, -prio)
                 if best is None or score > best[0]:
                     best = (score, ts, steps)
         if marks:
-            self.log(f"[dpc] PC solutions for {''.join(([hold] if hold else []) + seq[:7])}: {' '.join(marks)}")
+            self.log(f"[{'dpc' if tmpls is None else 'pc'}] PC solutions for "
+                     f"{''.join(([hold] if hold else []) + seq[:7])}: {' '.join(marks)}")
         return best
 
     # ------------------------------------------------------------ main API
@@ -833,6 +879,20 @@ class Brain:
         self._refresh_display()
         self._maybe_lookahead(board, hold)
         return step
+
+    def pc_check_due(self, board, hold):
+        """Does decide() look for a perfect clear in view before the setup? While a Jigsaw
+        or four.lol 2nd-7th PC setup is built or chosen (the T-spin loops keep their TSD),
+        once the pieces in view are enough for one within 4 lines (the controller then
+        plans after the hard drop: the search may take a moment)."""
+        fam = self.ts.tmpl.family if self.ts is not None else self.family
+        building = (self.stage in ("OPENER", "BAG2") and fam == "JIGSAW") or self.stage == "PC2" or (
+            self.stage == "PC8" and self.family == "PC2")
+        if not building or self.plan or board.rows[0] == 0 or (
+                self.ts is not None and self.ts.tmpl.stage.endswith("_pc")):
+            return False
+        avail = len(self._seq()) + (1 if hold else 0)
+        return any((10 * h - board.count()) // 4 <= avail for h in planner.pc_heights(board, 4))
 
     # ------------------------------------------------------------ look-ahead
     def _maybe_lookahead(self, board, hold):
@@ -883,6 +943,20 @@ class Brain:
 
         self.empty_field_stage(board)
 
+        # A perfect clear the pieces in view can finish comes before building (or choosing)
+        # any setup - the PC is the priority, not setting up the next one
+        if self.pc_check_due(board, hold):
+            sol = planner.find_pc(board, seq, hold, max_h=4, time_limit=0.05 if _hurry() else 0.25)
+            if sol:
+                sol = self._best_pc_ending(board, seq, hold, sol)
+                if self.ts is not None:
+                    self.log(f"[pc] the pieces in view finish a perfect clear - leaving {self.ts.tmpl.name}")
+                self.ts = None
+                self.plan, self.plan_full, self.plan_board = sol, list(sol), board.copy()
+                self._set_stage("PC", "(perfect clear in view)")
+                self.log(f"[pc] found {len(sol)}-piece perfect clear")
+                return sol[0]
+
         # Setup stages ------------------------------------------------------------
         choosing = self.ts is None and not self.plan and (
             self.stage in ("OPENER", "BAG2", "DPC", "PCDPC", "PC2")
@@ -897,25 +971,13 @@ class Brain:
                 best = self._select_dpc(board, hold)
             elif self.stage == "PCDPC":
                 best = self._select_dpc_pc(board, hold)
+            elif self.stage == "PC8" and self.family == "PC2":
+                # four.lol's solutions on this setup: certain ones first, else the likeliest
+                best = self._select_dpc_pc(board, hold, T.pc2_solutions(board))
             elif self.stage == "PC8":
                 best = self._select_pc8(board, hold)
             elif self.stage == "PC2":
-                # every four.lol 2nd PC pattern whose pieces are on hand (hold + queue)
-                have = Counter(([hold] if hold else []) + seq)
-                left = self._bag_leftover()
-                cands = [t for t in T.pc2_setups() if not (Counter(t.types()) - have)]
-                # exact leftover match first, then the highest PC chance; stop at the first
-                # setup that is certain to be built
-                cands.sort(key=lambda t: (sorted(t.types()) != left, -(t.pc_rate or 0.0)))
-                self.log(f"[pc2] left of this bag: {''.join(left) if left else '?'}; "
-                         f"{len(cands)} of {len(T.pc2_setups())} 2nd PC setups fit the pieces on hand")
-                best = None
-                for t in cands:
-                    b = self._select([t], board, hold)
-                    if b and (best is None or b[0][:3] > best[0][:3]):
-                        best = b
-                    if best and best[0][0] >= 1.0:
-                        break
+                best = self._select_pc_setup(board, hold)
             elif self.stage == "OPENER":
                 mid_bag = self.bag.offset is not None and self.unplaced_in_open_bag() > 1
                 best = self._select_opener(board, hold, min_p=0.99 if mid_bag else 0.0)
@@ -967,7 +1029,7 @@ class Brain:
             self.plan = []
             if self.stage == "FREE" and board.height() > 6:
                 return planner.heuristic_move(board, seq, hold)
-            max_h = {"PC8": 8, "PCDPC": 4}.get(self.stage, 4)
+            max_h = 8 if self.stage == "PC8" and self.family != "PC2" else 4
             budget = 2.5 if self.stage != "FREE" else 0.3
             if planner.SETTINGS["safe"] and not planner.background():
                 # high gravity: the piece is already on the stack and locks after ~0.5 s -
@@ -975,7 +1037,7 @@ class Brain:
                 # keeps the long budget)
                 budget = 0.3 if self.stage != "FREE" else 0.1
             sol = planner.find_pc(board, seq, hold, max_h=max_h, time_limit=budget)
-            if sol and self.stage in ("PC8", "FREE"):
+            if sol and self.stage in ("PC8", "FREE", "PC"):
                 sol = self._best_pc_ending(board, seq, hold, sol)
             if sol:
                 self.plan = sol
@@ -984,7 +1046,8 @@ class Brain:
                 return sol[0]
             if self.stage != "FREE":
                 self._set_stage("FREE", "(no perfect clear found)")
-        return planner.heuristic_move(board, seq, hold)
+        hs = planner.pc_heights(board, 4)
+        return planner.heuristic_move(board, seq, hold, pc_h=hs[-1] if hs else None)
 
     # ------------------------------------------------------------ PC endings
     def _simulate(self, board, hold, steps):
@@ -1006,10 +1069,15 @@ class Brain:
         """How good is the DPC that follows if the bot is in state `br` (field empty)?
         Returns (score, text)."""
         extra, _ = br.extra_piece()
+        n = br.unplaced_in_open_bag()
+        if n == 0:
+            return (1, 0.5, ""), "fresh bag -> opener next"
+        if n > 0 and (extra is None or all_pc()):
+            # four.lol's setup for the next PC of the loop: with the hold free, a piece no
+            # setup uses can wait there (with it taken, often no setup can be built)
+            return (1, 0.4 if hold is None else 0.1, ""), \
+                f"{T.ORDINAL[PC_NO[n % 7]]} PC setup next, hold {hold or 'free'}"
         if extra is None:
-            n = br.unplaced_in_open_bag()
-            if n == 0:
-                return (1, 0.5, ""), "fresh bag -> opener next"
             return (0, 0.0, ""), f"{n} pieces left in the bag (no opener/DPC fits)"
         seq = br._seq()
         # PCs that end alike (same extra piece, hold and queue) have the same outlook:
@@ -1071,9 +1139,25 @@ class Brain:
         return best[1]
 
     def empty_field_stage(self, board):
-        """After a perfect clear: an 8-line PC leads into the DPC, anything else into an opener."""
-        if self.stage in ("FREE", "PC8", "PCDPC") and board.rows[0] == 0 and not self.plan:
-            self._set_stage("DPC" if self.stage == "PC8" else "OPENER", "(field empty)")
+        """After a perfect clear the bag position says what comes next: a fresh bag -> an
+        opener; one piece over -> the DPC (ALL PC: the 3rd PC); otherwise four.lol's setup
+        for that PC of the 4-line loop (4 over -> 2nd PC, 1 -> 3rd, 5 -> 4th, ...)."""
+        if self.stage in ("FREE", "PC8", "PCDPC", "PC") and board.rows[0] == 0 and not self.plan:
+            n = self.unplaced_in_open_bag()
+            if n < 0:
+                nxt = "DPC" if self.stage == "PC8" else "OPENER"
+            elif n % 7 == 0:
+                nxt = "OPENER"
+            elif n == 1 and not all_pc():
+                nxt = "DPC"
+            else:
+                nxt = "PC2"
+            self._set_stage(nxt, "(field empty)")
+
+    def pc_no(self):
+        """Which PC of the 4-line loop comes next (1-7); None if the bag position is unknown."""
+        n = self.unplaced_in_open_bag()
+        return None if n < 0 else PC_NO[n % 7]
 
     def _plan_valid(self, board, seq, hold):
         st = self.plan[0]
@@ -1135,14 +1219,14 @@ class Brain:
                 self.built[done.name] += 1
                 self.log(f"[setup] finished {done.name}")
                 self._set_stage({"bag1": "BAG2", "bag2": "PC8", "dpc": "PCDPC", "dpc_pc": "PCDPC",
-                                 "sdpc_pc": "PC8", "pc8_pc": "PC8", "bag2_pc": "OPENER",
+                                 "sdpc_pc": "PC8", "pc8_pc": "PC8", "bag2_pc": "PC8",
                                  "pc1_pc": "PC2", "pc2": "PC8", "pc2_pc": "PC8"}[done.stage])
         self.next_step = None
         self._refresh_display()
 
     # ------------------------------------------------------------ overlay diagram
     _TITLES = {"OPENER": "Opener", "BAG2": "2nd bag", "PC8": "8-line PC", "DPC": "DPC setup",
-               "PCDPC": "DPC perfect clear", "FREE": "Free play", "PC2": "2nd PC setup"}
+               "PCDPC": "DPC perfect clear", "FREE": "Free play", "PC2": "PC setup", "PC": "Perfect clear"}
 
     def bag_status(self):
         """Pieces counter for the overlay: which pieces of the current 7-bag have spawned
@@ -1164,6 +1248,8 @@ class Brain:
         """Snapshot of what is being built, for the overlay (read from the UI thread)."""
         self.bag_view = self.bag_status()
         title = self._TITLES.get(self.stage, self.stage)
+        if self.stage == "PC2" or (self.stage == "PC8" and self.family == "PC2"):
+            title = f"{T.ORDINAL.get(getattr(self, 'pc_n', None), '')} {'PC setup' if self.stage == 'PC2' else 'PC'}".strip()
         extra = getattr(self, "extra", None)
         if self.ts is not None:
             t = self.ts.tmpl

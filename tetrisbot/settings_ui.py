@@ -460,6 +460,7 @@ class HandlingWindow(NSObject):
     @objc.python_method
     def _apply(self):
         self.h.openers = self.bot.h.openers      # set in the Openers window
+        self.h.all_pc = self.bot.h.all_pc
         self.h.mode = self.bot.h.mode            # set in the overlay's MODE row
         self.h.save()
         self.bot.set_handling(replace(self.h))
@@ -493,7 +494,7 @@ class HandlingWindow(NSObject):
     @objc.python_method
     def _reset(self):
         keep = {k: getattr(self.h, k) for k in ("optimize", "key_gap_ms", "max_tap_ms", "check_piece", "gravity",
-                                                 "use_180", "openers", "mode", "sprint_preview",
+                                                 "use_180", "openers", "all_pc", "mode", "sprint_preview",
                                                  *_CONTROL_FIELDS)}
         self.h = Handling(**keep)
         for c in self.checks:
@@ -767,7 +768,7 @@ class OpenersWindow(NSObject):
         title = AppKit.NSTextField.labelWithString_("Openers")
         title.setFont_(AppKit.NSFont.boldSystemFontOfSize_(15))
         title.setTextColor_(AppKit.NSColor.whiteColor())
-        title.setFrame_(AppKit.NSMakeRect(16, H - 34, 200, 20))
+        title.setFrame_(AppKit.NSMakeRect(16, H - 34, 120, 20))
         bg.addSubview_(title)
         sub = AppKit.NSTextField.labelWithString_("The bot builds the first one on the list that this bag "
                                                   "allows. The advisor follows whatever you build.")
@@ -782,6 +783,16 @@ class OpenersWindow(NSObject):
         close.setTarget_(self)
         close.setAction_("close:")
         bg.addSubview_(close)
+        allpc = AppKit.NSButton.alloc().initWithFrame_(AppKit.NSMakeRect(OW - 148, H - 36, 74, 24))
+        allpc.setBezelStyle_(AppKit.NSBezelStyleRounded)
+        allpc.setButtonType_(AppKit.NSButtonTypePushOnPushOff)
+        allpc.setTitle_("ALL PC")
+        allpc.setToolTip_("Perfect clears only: Jaws, then four.lol's 2nd-7th PCs, over and over. "
+                          "Turns every other opener off.")
+        allpc.setTarget_(self)
+        allpc.setAction_("allPc:")
+        bg.addSubview_(allpc)
+        self.allpc = allpc
 
         lst_h = 2 * HEAD_H + n * ROW_H
         self.list = OpenerList.alloc().initWithFrame_(AppKit.NSMakeRect(12, H - TOP - lst_h, OW - 24, lst_h))
@@ -792,11 +803,25 @@ class OpenersWindow(NSObject):
         self.win = p
 
     @objc.python_method
-    def _apply(self, order):
+    def _apply(self, order, all_pc=None):
         h = replace(self.bot.h)
         h.openers = ",".join(order)
+        # switching another opener on (or Jaws off) leaves ALL PC
+        h.all_pc = all_pc if all_pc is not None else (h.all_pc and order == ["JAWS"])
         h.save()
         self.bot.set_handling(h)
+        self._show_all_pc()
+
+    def allPc_(self, sender):
+        on = sender.state() == AppKit.NSControlStateValueOn
+        if on:
+            self.list.order = ["JAWS"]          # ALL PC: Jaws only, every other opener off
+            self.list.layout_rows()
+        self._apply(list(self.list.order), all_pc=on)
+
+    @objc.python_method
+    def _show_all_pc(self):
+        self.allpc.setState_(AppKit.NSControlStateValueOn if self.bot.h.all_pc else AppKit.NSControlStateValueOff)
 
     def close_(self, sender):
         self.win.orderOut_(None)
@@ -804,4 +829,5 @@ class OpenersWindow(NSObject):
     def show(self):
         self.list.order = self.bot.h.opener_order()
         self.list.layout_rows(animate=False)
+        self._show_all_pc()
         self.win.orderFrontRegardless()

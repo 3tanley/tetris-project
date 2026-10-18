@@ -717,6 +717,10 @@ def test_openers_setting_round_trip(tmp_path):
     assert h2.opener_order() == ["JIGSAW", "JAWS", "SDPC", "MS2", "MS"]
     h2.set_opener("MS3", True)                   # switched on: bottom of the list
     assert h2.opener_order()[-1] == "MS3"
+    assert not h2.all_pc
+    h2.all_pc = True
+    h2.save(tmp_path / "s.json")
+    assert Handling.load(tmp_path / "s.json").all_pc
 
 
 def test_dpc_plans_its_pc_only_near_the_end(monkeypatch):
@@ -858,15 +862,18 @@ def test_sideways_moves_happen_before_the_soft_drop():
 
 def test_jaws_and_second_pc_templates_clear_the_field():
     """Jaws (four.lol ILSZ: 22 + ILOSZ 31 + ILJOSZ 15 solutions, mirrors, duplicates
-    removed) and four.lol's 2nd PC solutions are perfect clears; every 2nd PC setup has
-    solutions that start from it."""
+    removed) and four.lol's 2nd-7th PC solutions are perfect clears; every setup for those
+    PCs has solutions that start from it (except the 7th PC's 100% setups: four.lol draws
+    none, the solver finishes them)."""
     lib = templates.library()
     assert len(lib["jaws"]) == 108
     for t in lib["jaws"] + lib["pc2_pc"]:
         assert templates.residue(t).rows[0] == 0, t.name
     sol_fields = {tuple(t.g_board().rows) for t in lib["pc2_pc"]}
     for t in lib["pc2"]:
-        assert tuple(templates.residue(t).rows) in sol_fields, t.name
+        assert tuple(templates.residue(t).rows) in sol_fields or (t.pc_no == 7 and t.pc_rate == 1.0), t.name
+    assert all(templates.pc2_setups(n) for n in range(2, 8))
+    assert len(templates.pc2_setups(2)) == 88          # the 2nd PC set as before the 3rd-7th were added
     # every Jaws solution leaves 4 pieces that some 2nd PC pattern takes - except #22,
     # which leaves two O's (no four.lol pattern; rated 0, so it's the last choice)
     assert all(t.pc_rate >= 0.8 for t in lib["jaws"] if t.leftover2 and len(set(t.leftover2)) == 4)
@@ -891,6 +898,7 @@ def test_second_pc_scans_every_pattern(monkeypatch):
     br.bag.reset(aligned=True)
     br.bag.history = list("ILSZOTJ") + list("OSLJTZI") + list("SOJLITZ")
     br.cur_index = 10                       # bag 2: J T Z I left
+    br.placed = set(range(10))
     br.stage = "PC2"
     step = br.decide(core.Board(), "J", None, list("TZISO"))
     assert br.ts is not None and br.ts.tmpl.stage == "pc2", br.stage
@@ -1374,3 +1382,72 @@ def test_controls_from_settings(tmp_path):
     assert kb.codes[core.DAS_LEFT] == kb.codes[core.LEFT] == KEYCODES["j"]
     kb.h = replace(h, bind_left="left", bind_right="d")
     assert kb.codes[core.DAS_LEFT] == KEYCODES["left"] and kb.codes[core.DAS_RIGHT] == KEYCODES["d"]
+
+
+def test_all_pc_counts_the_loop_from_the_bag():
+    """ALL PC: Jaws only, and after every PC the pieces left of the oldest bag say which of
+    the 7 PCs comes next (one piece over is the 3rd PC, not the DPC)."""
+    from tetrisbot.brain import Brain, opener_priority
+    from tetrisbot.handling import Handling
+    h = Handling()
+    h.openers, h.all_pc = "JAWS,JIGSAW,SDPC", True
+    planner.configure(h)
+    try:
+        assert opener_priority() == ["JAWS"]
+        br = Brain(log=lambda m: None)
+        br.bag.reset(aligned=True)
+        br.bag.history = list("ILSZOTJ" "OSLJTZI" "SOJLITZ" "TZOSLIJ")
+        for used, n in ((10, 2), (20, 3), (7, 1), (14, 1)):
+            br.placed = set(range(used))
+            assert br.pc_no() == n, (used, br.pc_no())
+        br.placed, br.stage = set(range(20)), "PC8"
+        br.empty_field_stage(core.Board())
+        assert br.stage == "PC2"                    # the DPC is only used outside ALL PC
+    finally:
+        planner.configure(Handling())
+
+
+def test_jigsaw_takes_the_pc_in_view_before_stacking_for_the_next():
+    """User: with Jigsaw the bot set up the 2nd PC without trying the 1st with the pieces it
+    had. The bag-1 build + held piece + 3 pieces of bag 2 is a 4-line PC: it goes for it."""
+    from tetrisbot.brain import Brain, Lookahead
+    from tetrisbot.handling import Handling
+    h = Handling()
+    h.openers = "JIGSAW"
+    planner.configure(h)
+    try:
+        g = sim.Game(1)
+        logs = []
+        br = Brain(log=logs.append, lookahead=Lookahead(threaded=False))
+        br.bag.reset(aligned=True)
+        for _ in range(10):
+            st = br.decide(g.board, g.current, g.hold, g.visible())
+            _, cl, _, hwe = g.apply(st)
+            br.on_lock(st, hwe, cl, g.board)
+    finally:
+        planner.configure(Handling())
+    assert br.stats["pc"] == 1 and g.lines == 4, logs
+    assert any("pieces in view finish a perfect clear" in m for m in logs), logs
+
+
+def test_all_pc_keeps_clearing():
+    """ALL PC in simulation: perfect clear after perfect clear, 4 lines each."""
+    from tetrisbot.brain import Brain, Lookahead
+    from tetrisbot.handling import Handling
+    h = Handling()
+    h.openers, h.all_pc = "JAWS", True
+    planner.configure(h)
+    try:
+        g = sim.Game(9)
+        br = Brain(log=lambda m: None, lookahead=Lookahead(threaded=False))
+        br.bag.reset(aligned=True)
+        ends = []
+        for i in range(100):
+            st = br.decide(g.board, g.current, g.hold, g.visible())
+            _, cl, _, hwe = g.apply(st)
+            br.on_lock(st, hwe, cl, g.board)
+            if cl and g.board.rows[0] == 0:
+                ends.append(i + 1)
+    finally:
+        planner.configure(Handling())
+    assert ends == list(range(10, 101, 10)), ends      # 10 PCs in a row, every 10 pieces

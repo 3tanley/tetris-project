@@ -23,7 +23,12 @@ perfect-clear loop built from three community guides:
    with mirrors for Z / L). Then a 4-line PC leaves an empty field and a fresh bag, so it goes back to step 1.
 
 If a setup or PC can't be made with the pieces it gets, it plays safe "free" stacking and
-keeps looking for perfect clears, and goes back to the loop when the field is empty.
+keeps looking for perfect clears, and goes back to the loop when the field is empty. While
+the field is at most 4 rows high, free play only places pieces that keep a 4-line PC
+possible (no holes, every gap a multiple of 4 cells), when it can.
+
+With **ALL PC** on (see [ALL PC](#all-pc)) it skips the T-spin steps and loops 4-line perfect
+clears only: Jaws, then four.lol's 2nd–7th PCs, then Jaws again.
 
 ## Setup (once)
 
@@ -268,6 +273,44 @@ opener on.
   only SD-PC is on and the O comes after S, Z and T), it may use one that is switched off.
   The log says so: `[opener] ... - failsafe: none of the selected openers can be built`.
 
+### ALL PC
+
+The **ALL PC** button at the top of the Openers panel switches every other opener off and
+loops 4-line perfect clears: the 1st PC (Jaws), then four.lol's
+[2nd](https://four.lol/perfect-clears/2nd), [3rd](https://four.lol/perfect-clears/3rd),
+[4th](https://four.lol/perfect-clears/4th), [5th](https://four.lol/perfect-clears/5th),
+[6th](https://four.lol/perfect-clears/6th) and [7th](https://four.lol/perfect-clears/7th) PC
+setups (`setups_fourlol_2pc.py`, `setups_fourlol_pcs.py`). 7 PCs use 70 pieces = 10 bags, so
+after the 7th the next bag starts fresh and the loop starts again with Jaws. Switching any
+other opener on (or Jaws off) turns ALL PC off.
+
+* **Which PC is next:** counted from the bag, not remembered: a 4-line PC uses 10 pieces, so
+  the pieces of the oldest bag not placed yet say where the loop is (0 → 1st, 4 → 2nd,
+  1 → 3rd, 5 → 4th, 2 → 5th, 6 → 6th, 3 → 7th). After any perfect clear (an 8-line one, or
+  one found in free play) the loop carries on from there.
+* **1st PC:** Jaws when the bag allows it (see below); otherwise the Jigsaw bag-1 build,
+  which leads to a 4-line PC as soon as the pieces in view finish one (or to Jigsaw's sure
+  8-line PC).
+* **2nd–7th PC:** among four.lol's setups for that PC (with mirrors) whose pieces are on
+  hand or at most 2 pieces away: the one using most of the pieces left of the last bag (four.lol
+  draws each setup for those), then the best build chance × four.lol's PC chance. Then
+  four.lol's solution for that setup that the next pieces can build (certain ones first),
+  or the solver.
+* **Ending a PC:** when several ways to finish a PC are found, the one that leaves the
+  hold empty. A leftover piece stuck in hold is the usual reason no setup fits the next PC.
+* **Simulation** (150 pieces per game, 28 games): 18 games had 10 or more PCs in a row (up
+  to 15, all that 150 pieces allow); 12 of 347 PCs needed more than 8 lines (free play
+  after no setup fit). Not tested on real TETR.IO yet.
+
+### Perfect clear first
+
+With the Jigsaw loop and the 2nd–7th PC setups, a perfect clear the pieces in view can
+finish comes before building or choosing the next setup: e.g. Jigsaw's bag-1 build plus
+the held piece and 3 pieces of bag 2 is a 4-line PC, so it does that PC instead of stacking
+T S J I for the next one. The search runs once the pieces in view are enough for a PC;
+the bot then plans the next piece after the hard drop. The T-spin loops (SD-PC, MS, DPC)
+keep their TSD first.
+
 ### Jaws (ILSZ) → 2nd PC → DPC
 
 From [four.lol ILSZ](https://four.lol/perfect-clears/ILSZ) and
@@ -294,8 +337,8 @@ From [four.lol ILSZ](https://four.lol/perfect-clears/ILSZ) and
   solution works, and the build fails often (in simulation about 40% of the time). That
   is about 1 bag in 11 (440 of 5040 orders); other bags use another opener.
 * **2nd PC:** every four.lol 2nd PC setup whose pieces are on hand is considered (exact
-  leftover match and higher PC chance first); then the PC solution that leaves the best
-  DPC extra piece. The one piece left over goes into the DPC.
+  leftover match and higher PC chance first); then the PC solution that the next pieces can
+  build. The one piece left over goes into the DPC (ALL PC: the 3rd PC).
 
 ### Jigsaw PC loop (off by default)
 
@@ -306,8 +349,10 @@ From the [Hard Drop wiki](https://harddrop.com/wiki/Jigsaw_PC_Loop) (`tetrisbot/
 * **Bag 2:** the 3-line solve (the held piece + Z O L) with T S J I stacked on top; when
   the 3 lines clear, the same field is always left. If Z, O and L come early, the solve
   can finish first: an early perfect clear, then T S J I go on the empty field. The
-  alternate build is only for the IO > Z > L order. The wiki's early-PC solves (ZOTI etc.)
-  are kept as a last resort, because they end the loop.
+  alternate build is only for the IO > Z > L order. A 4-line PC the pieces in view can
+  finish (like the wiki's early-PC solves, ZOTI etc.) comes first (see
+  [Perfect clear first](#perfect-clear-first)); the 4 pieces left of bag 2 then go into
+  four.lol's 2nd PC.
 * **Bag 3:** one of the six 4-line PCs, chosen by which DPC the leftover piece allows:
   S or Z left (S/Z DPC), or O left (the Tetris-PC solves).
 

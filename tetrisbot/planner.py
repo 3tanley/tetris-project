@@ -749,12 +749,18 @@ def evaluate(board, lines, spin):
     return score
 
 
-def heuristic_move(board, seq, hold, lookahead=True):
+def heuristic_move(board, seq, hold, lookahead=True, pc_h=None):
+    """Best placement by the stacking heuristic. pc_h: only placements that keep a pc_h-line
+    PC possible (field within pc_h rows, no holes, empty regions a multiple of 4 cells) -
+    if there are any - so the solver can finish one when enough pieces are in view."""
     best = None
     for p, used_hold, ni, nh in _choices(seq, 0, hold) or [(seq[0], False, 1, hold)]:
         for pl in movegen(board, p).values():
             nb = board.copy()
             lines = len(nb.place_cells(pl.cells))
+            if pc_h is not None and (nb.height() > pc_h - lines or holes_covered(nb, nb.col_heights())[0]
+                                     or not _groups_ok(nb, pc_h - lines)):
+                continue
             s = evaluate(nb, lines, pl.spin)
             if lookahead and ni < len(seq):
                 # add the best board quality reachable with the next piece (straight drops
@@ -763,6 +769,8 @@ def heuristic_move(board, seq, hold, lookahead=True):
                          default=0)
             if best is None or s > best[0]:
                 best = (s, Step(used_hold, pl))
+    if best is None and pc_h is not None:
+        return heuristic_move(board, seq, hold, lookahead)
     return best[1] if best else None
 
 

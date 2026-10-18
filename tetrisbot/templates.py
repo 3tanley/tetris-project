@@ -6,6 +6,7 @@ type). Slots marked `spin` are T pieces meant to be spun in (TSS/TSD/TST).
 When rows clear on the board the same rows are dropped from the template, so
 diagrams drawn "before the clear" (like the wiki's) work as-is.
 """
+import re
 from collections import Counter
 
 from . import core, fumen
@@ -15,6 +16,7 @@ from .setups_fourlol_sdpc import SDPC_PC_FUMENS
 from . import setups_jigsaw as JIG
 from . import setups_jaws as JAWS
 from .setups_fourlol_2pc import PATTERNS as PC2_PATTERNS
+from .setups_fourlol_pcs import PATTERNS as PCS
 
 MIRROR_TYPE = {"L": "J", "J": "L", "S": "Z", "Z": "S", "I": "I", "O": "O", "T": "T"}
 
@@ -92,8 +94,9 @@ class Template:
         self.fallback = False       # only when nothing better can be built (compromise etc.)
         self.spin_last = True       # the T-spin finishes the setup (see dependencies)
         self.pc_rate = None         # published PC chance of what follows, if known
+        self.pc_no = None           # four.lol 2nd-7th PC setups: which PC of the loop
 
-    _EXTRA = ("fallback", "spin_last", "pc_rate")
+    _EXTRA = ("fallback", "spin_last", "pc_rate", "pc_no")
 
     def __repr__(self):
         return f"<Template {self.name}>"
@@ -321,38 +324,63 @@ def _jigsaw_templates():
     return bag1, bag2, bag3
 
 
-def _pc2_templates():
-    """four.lol 2nd PC: (setups, solutions). A setup arranges the 4 leftover pieces on the
-    empty field; a solution is the 4-line PC on top of it (grey = the setup)."""
+ORDINAL = {1: "1st", 2: "2nd", 3: "3rd", 4: "4th", 5: "5th", 6: "6th", 7: "7th"}
+_PAGE_PCT = re.compile(r"([\d.]+)%")
+
+
+def _pc_templates():
+    """four.lol 2nd-7th PC: (setups, solutions). A setup arranges pieces on the empty field
+    (the pieces left of the last bag + a few new ones); a solution is the 4-line PC on top
+    of it (grey = the setup). Setups carry `pc_no`, the PC they are drawn for."""
     setups, sols = [], []
-    for name, pct, codes in PC2_PATTERNS:
-        ns = nsol = 0
-        for code in codes:
-            for page in fumen.decode(code):
-                rows = page.rows(with_op=True)
-                if not rows:
-                    continue
-                cells = "".join(rows)
-                coloured = any(c not in ".X" for c in cells)
-                if not coloured:
-                    continue                          # the grey outline only
-                toks = [[None if c == "." else ("G" if c == "X" else c) for c in r] for r in rows]
-                grey = "X" in cells
-                try:
-                    if not grey:
-                        ns += 1
-                        t = _build(f"PC2-{name}-setup{ns}", "PC2", "pc2", toks,
-                                   f"2nd PC {name} ({pct}%)", lambda tok: ([tok], False))
-                    else:
-                        nsol += 1
-                        t = _build(f"PC2-{name}-{nsol}", "PC2", "pc2_pc", toks,
-                                   f"2nd PC {name}: solution {nsol} ({page.comment.strip()})",
-                                   lambda tok: ([tok], tok == "T"), split_ok=True)
-                except ValueError:
-                    continue
-                t.label, t.pc_rate = f"2nd PC {name}", pct / 100.0
-                (sols if grey else setups).append(t)
+    for n, patterns in [(2, PC2_PATTERNS)] + sorted(PCS.items()):
+        for name, pct, codes in patterns:
+            ns = nsol = 0
+            drawn = []                                # this pattern's setups, for grey extensions
+            for code in codes:
+                for page in fumen.decode(code):
+                    m = _PAGE_PCT.search(page.comment)
+                    rate = float(m.group(1)) if m else pct
+                    for blk in _blocks(page.rows(with_op=True)):
+                        cells = "".join(blk)
+                        if all(c in ".X" for c in cells):
+                            continue                  # the grey outline only
+                        grey, gaps = "X" in cells, "." in cells
+                        if grey and gaps:
+                            blk = _ungrey(blk, drawn)  # more pieces on a setup drawn grey
+                            if blk is None:
+                                continue
+                        toks = [[None if c == "." else ("G" if c == "X" else c) for c in r] for r in blk]
+                        try:
+                            if not grey or gaps:
+                                ns += 1
+                                t = _build(f"PC{n}-{name}-setup{ns}", "PC2", "pc2", toks,
+                                           f"{ORDINAL[n]} PC {name} ({rate}%)",
+                                           lambda tok: ([tok.upper()], False))
+                                drawn.append(blk)
+                            else:
+                                nsol += 1
+                                t = _build(f"PC{n}-{name}-{nsol}", "PC2", "pc2_pc", toks,
+                                           f"{ORDINAL[n]} PC {name}: solution {nsol} ({page.comment.strip()})",
+                                           lambda tok: ([tok], tok == "T"), split_ok=True)
+                        except ValueError:
+                            continue
+                        t.label, t.pc_rate, t.pc_no = f"{ORDINAL[n]} PC {name}", (rate or 0.0) / 100.0, n
+                        (setups if not grey or gaps else sols).append(t)
     return setups, sols
+
+
+def _ungrey(blk, drawn):
+    """A page that draws an earlier setup of the pattern in grey plus new pieces: put the
+    setup's pieces back (lower case, so they stay separate pieces). None if no setup fits."""
+    h = len(blk)
+    grey = {(x, h - 1 - y) for y, r in enumerate(blk) for x, c in enumerate(r) if c == "X"}
+    for s in drawn:
+        cells = {(x, len(s) - 1 - y): c for y, r in enumerate(s) for x, c in enumerate(r) if c != "."}
+        if set(cells) == grey:
+            return ["".join(cells[(x, h - 1 - y)].lower() if c == "X" else c for x, c in enumerate(r))
+                    for y, r in enumerate(blk)]
+    return None
 
 
 def _jaws_templates():
@@ -414,7 +442,7 @@ def library():
     if _LIB is None:
         setups, sols = _dpc_templates()
         j1, j2, j3 = _jigsaw_templates()
-        p2s, p2p = _pc2_templates()
+        p2s, p2p = _pc_templates()
         _LIB = {"wiki": _with_mirrors(_wiki_templates()) + _with_mirrors(j1) + _dedupe(_with_mirrors(j2)),
                 "dpc": _with_mirrors(setups),
                 "dpc_pc": _dedupe(_with_mirrors(sols)),
@@ -422,14 +450,17 @@ def library():
                 "jigsaw_pc": _dedupe(_with_mirrors(j3)),
                 "jaws": _dedupe(_with_mirrors(_jaws_templates())),
                 "pc2_pc": _dedupe(_with_mirrors(p2p))}
-        # a 2nd PC setup is only useful if some solution starts from the field it leaves
-        # (four.lol's setup fumens also hold a few in-between drawings)
+        # a PC setup is only useful if some solution starts from the field it leaves
+        # (four.lol's setup fumens also hold a few in-between drawings) - except the 7th
+        # PC's 100% setups, drawn without solutions: the 7 pieces after them are all in
+        # view (5 previews + the inferred end of the bag), so the solver finishes them
         starts = {tuple(t.g_board().rows) for t in _LIB["pc2_pc"]}
-        _LIB["pc2"] = [t for t in _dedupe(_with_mirrors(p2s)) if tuple(residue(t).rows) in starts]
+        _LIB["pc2"] = [t for t in _dedupe(_with_mirrors(p2s))
+                       if tuple(residue(t).rows) in starts or (t.pc_no == 7 and t.pc_rate == 1.0)]
         # a Jaws solution decides which 4 pieces of bag 2 are left: rate it by the best
         # 2nd PC pattern for those (bag 2 = the 6 solution pieces minus O T J of bag 1)
         best = {}
-        for t in _LIB["pc2"]:
+        for t in pc2_setups(2):
             k = tuple(sorted(t.types()))
             best[k] = max(best.get(k, 0.0), t.pc_rate)
         for t in _LIB["jaws"]:
@@ -465,17 +496,21 @@ def openers(families=None):
     return [t for f in fams for t in lib if t.family == f and t.stage in ("bag1", "pc1_pc")]
 
 
-def pc2_setups(leftover=None):
-    """2nd PC setups; `leftover` = the 4 piece types left of bag 2 (None = all)."""
-    lib = library()["pc2"]
-    if leftover is None:
-        return lib
-    k = sorted(leftover)
-    return [t for t in lib if sorted(t.types()) == k]
+def pc2_setups(pc_no=None):
+    """four.lol setups for the `pc_no`-th PC of the loop (2-7; None = all of them)."""
+    return [t for t in library()["pc2"] if pc_no is None or t.pc_no == pc_no]
 
 
-def pc2_solutions():
-    return library()["pc2_pc"]
+def pc2_solutions(board=None):
+    """four.lol's 2nd-7th PC solutions; with `board`, only those starting from it."""
+    lib = library()
+    if board is None:
+        return lib["pc2_pc"]
+    if "pc2_pc_at" not in lib:
+        lib["pc2_pc_at"] = {}
+        for t in lib["pc2_pc"]:
+            lib["pc2_pc_at"].setdefault(tuple(t.g_board().rows), []).append(t)
+    return lib["pc2_pc_at"].get(tuple(board.rows), [])
 
 
 def second_bag(family):
