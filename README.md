@@ -282,6 +282,8 @@ opener on.
 * **Failsafe:** if none of the openers switched on can be built for sure with this bag (e.g.
   only SD-PC is on and the O comes after S, Z and T), it may use one that is switched off.
   The log says so: `[opener] ... - failsafe: none of the selected openers can be built`.
+  The advisor (BOT PLAYS off) skips the failsafe when only one opener is switched on (ALL PC
+  counts as Jaws only): it always shows that opener, because the player is building it.
 
 ### ALL PC
 
