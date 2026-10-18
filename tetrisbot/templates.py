@@ -513,6 +513,32 @@ def pc2_solutions(board=None):
     return lib["pc2_pc_at"].get(tuple(board.rows), [])
 
 
+_FULL = {}
+
+
+def pc_full(setup):
+    """A 2nd-7th PC setup with each four.lol solution on it, as one 10-piece template (like
+    Jaws): a piece the setup doesn't use that comes early goes straight to its solution
+    spot. Setup slots are named b<sid>."""
+    if setup.name not in _FULL:
+        out = []
+        full = [y for y, row in enumerate(setup.grid) if all(row)]     # rows the setup clears
+        for sol in pc2_solutions(residue(setup)):
+            grid = [list(row) for row in sol.grid]
+            for y in full:
+                grid.insert(y, [None] * core.W)
+            grid = [[("b" + setup.grid[y][x]) if y < len(setup.grid) and setup.grid[y][x] else t
+                     for x, t in enumerate(row)] for y, row in enumerate(grid)]
+            slots = dict(sol.slots)
+            slots.update({"b" + sid: Slot("b" + sid, s.ptype, s.cells, s.spin) for sid, s in setup.slots.items()})
+            t = Template(f"{setup.name}+{sol.name}", "PC2", "pc2_pc", grid, slots,
+                         f"{sol.note} (built with the setup)", setup.mirrored, label=sol.label)
+            t.pc_rate, t.pc_no, t.setup = setup.pc_rate, setup.pc_no, setup
+            out.append(t)
+        _FULL[setup.name] = out
+    return _FULL[setup.name]
+
+
 def second_bag(family):
     return [t for t in library()["wiki"] if t.family == family and t.stage in ("bag2", "bag2_pc")]
 

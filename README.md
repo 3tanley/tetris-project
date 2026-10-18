@@ -308,7 +308,18 @@ other opener on (or Jaws off) turns ALL PC off.
   hand or at most 2 pieces away: the one using most of the pieces left of the last bag (four.lol
   draws each setup for those), then the best build chance × four.lol's PC chance. Then
   four.lol's solution for that setup that the next pieces can build (certain ones first),
-  or the solver.
+  or the solver. Advisor: if no setup can be built before its solution (e.g. Z in hold with J and S
+  both coming before the setup's O: two pieces to keep out of the way, one hold), a setup
+  is built together with one of its four.lol solutions, so an early piece goes straight to
+  its solution spot; the build switches between that setup's solutions as pieces arrive.
+  (When the bot plays it uses free play + the PC solver there, which did better in
+  simulation.)
+* **No DPC:** ALL PC never builds or recognises a DPC, also when the bag position is lost
+  (e.g. after the advisor re-reads the game).
+* **four.lol data** (checked 2026-10-18 against the pages' data): every setup and solution
+  of the 2nd–7th PC pages, including the 7th PC page's solution under each 100% pattern.
+  The 7th PC page's Summary setups that have no pattern section of their own are left to the
+  solver.
 * **Ending a PC:** when several ways to finish a PC are found, the one that leaves the
   hold empty. A leftover piece stuck in hold is the usual reason no setup fits the next PC.
 * **Simulation** (150 pieces per game, 28 games): 18 games had 10 or more PCs in a row (up

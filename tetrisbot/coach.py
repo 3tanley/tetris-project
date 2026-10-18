@@ -18,7 +18,7 @@ from collections import Counter
 
 from . import core, planner, vision
 from . import templates as T
-from .brain import Brain, _rebase, opener_priority, sibling_pool
+from .brain import Brain, _rebase, all_pc, opener_priority, sibling_pool
 from .model import SetupPrior
 
 SETUP_STAGES = ("OPENER", "BAG2", "DPC", "PC2")
@@ -47,19 +47,24 @@ def fit_placement(before, after, pieces, unk=None):
                 if not b.place_cells(core.cells_of(p, r, x, y)) and b == after:
                     return p, r, x, y, [], b
     for p in pieces:                                       # line clear / hidden cells: try every resting spot
-        for r in range(4):
-            for x in range(-2, core.W + 2):
-                for y in range(-2, 20):
-                    cells = core.cells_of(p, r, x, y)
-                    if any(not (0 <= cx < core.W and 0 <= cy < 20) or before.filled(cx, cy) for cx, cy in cells):
-                        continue
-                    if not any(cy == 0 or before.filled(cx, cy - 1) for cx, cy in cells):
-                        continue
-                    b = before.copy()
-                    cleared = b.place_cells(cells)
-                    if _same(b, after, unk):
-                        return p, r, x, y, cleared, b
+        for r, x, y, cells in _resting(before, p):
+            b = before.copy()
+            cleared = b.place_cells(cells)
+            if _same(b, after, unk):
+                return p, r, x, y, cleared, b
     return None
+
+
+def _resting(board, p):
+    """Every spot where piece `p` rests on `board`: (rot, x, y, cells)."""
+    for r in range(4):
+        for x in range(-2, core.W + 2):
+            for y in range(-2, 20):
+                cells = core.cells_of(p, r, x, y)
+                if any(not (0 <= cx < core.W and 0 <= cy < 20) or board.filled(cx, cy) for cx, cy in cells):
+                    continue
+                if any(cy == 0 or board.filled(cx, cy - 1) for cx, cy in cells):
+                    yield r, x, y, cells
 
 
 def _slot_at(ts, piece, cells):
@@ -234,7 +239,7 @@ class Coach(Events):
         br = self.brain
         st = br.stage
         if st == "OPENER":
-            return T.openers(self._openers()) + T.dpc()
+            return T.openers(self._openers()) + ([] if all_pc() else T.dpc())
         if st == "BAG2":
             if br.family:
                 return T.second_bag(br.family)
@@ -391,7 +396,23 @@ class Watcher:
         self.pending_n += 1
         if self.pending_n < self.STABLE_FRAMES:
             return
-        if self._lock(scr, unk, vision.read_hold(img, geo)):
+        if self.need_spawn:
+            # the next piece spawned and locked between two reads: it was in play
+            self._spawn(self.hold, vision.read_queue(img, geo), moved_on=True)
+        hold_now = vision.read_hold(img, geo)
+        if self._lock(scr, unk, hold_now):
+            return
+        # the falling piece may not be the topmost tetromino: a piece that locked between
+        # two reads with the next one tucked under it (2026-10-18 recording: J locked, Z
+        # spun in below it before the next read - the J was taken for the falling piece)
+        for _, other in vision.active_groups(img, geo, self.model)[1:]:
+            alt = board.copy()
+            for x, y in other:
+                if y < 20:
+                    alt.rows[y] &= ~(1 << x)
+            if self._lock(alt, unk, hold_now):
+                return
+        if self._lock2(scr, unk, hold_now):
             return
         if now - self.diff_since > self.RESYNC_S:
             self.log("[coach] can't explain the board change with one piece - re-reading the game")
@@ -439,15 +460,59 @@ class Watcher:
         self.pending, self.pending_n, self.diff_since = None, 0, None
         return True
 
-    def _spawn(self, hold_scr, q):
+    def _lock2(self, scr, unk, hold_now):
+        """Two pieces locked between two steady reads (slow reads while the falling piece
+        kept the screen changing - 2026-10-18 recording at 3 reads/s: J locked, Z spun in
+        under it). Every way to use hold is tried; it has to end with the hold on screen."""
+        q = self.queue
+        grew = all(self.model.rows[y] | scr.rows[y] == scr.rows[y] for y in range(core.H)) and not any(unk)
+        for h1 in (False, True):
+            p1, hold1, rest = self.cur, self.hold, q
+            if h1:
+                p1 = self.hold if self.hold is not None else (q[0] if q else None)
+                hold1, rest = self.cur, (q[1:] if self.hold is None else q)
+            if p1 is None or not rest:
+                continue
+            c2, rest2 = rest[0], rest[1:]
+            for h2 in (False, True):
+                p2, hold2 = c2, hold1
+                if h2:
+                    p2, hold2 = (hold1 if hold1 is not None else (rest2[0] if rest2 else None)), c2
+                if p2 is None or hold2 != hold_now:
+                    continue
+                for r, x, y, cells in _resting(self.model, p1):
+                    if grew and not all(scr.filled(cx, cy) for cx, cy in cells):
+                        continue                    # no line clear: both pieces are on screen
+                    mid = self.model.copy()
+                    cleared1 = mid.place_cells(cells)
+                    fit = fit_placement(mid, scr, [p2], unk)
+                    if fit is None:
+                        continue
+                    _, r2, x2, y2, cleared2, after = fit
+                    self.log(f"[coach] two pieces locked between reads: {p1}, then {p2}")
+                    self.coach.locked(self.model, p1, r, x, y, h1, mid, cleared1)
+                    self.coach.spawned(mid, c2, hold1, rest)
+                    self.coach.locked(mid, p2, r2, x2, y2, h2, after, cleared2)
+                    self.model = after
+                    shift = 2 if (h2 and hold1 is None) else 1
+                    self.next_cur = rest2[shift - 1] if shift - 1 < len(rest2) else None
+                    self.known = rest2[shift:]
+                    self.hold = hold2
+                    self.need_spawn = True
+                    self.pending, self.pending_n, self.diff_since = None, 0, None
+                    return True
+        return False
+
+    def _spawn(self, hold_scr, q, moved_on=False):
         """The next piece is in play. Its spawn state: current = the queue piece that was
         due, hold = what the last lock left, next 5 = the screen queue (one step back if
-        the user already pressed hold on an empty hold before this read)."""
+        the user already pressed hold on an empty hold before this read, or `moved_on`:
+        the piece may already be down and the next one in play)."""
         known = self.known
         if q[:len(known)] == known:
             queue = q
-        elif self.hold is None and hold_scr is not None and q[:len(known) - 1] == known[1:]:
-            queue = known[:1] + q[:4]          # held right at spawn: the queue moved on once more
+        elif (moved_on or self.hold is None and hold_scr is not None) and q[:len(known) - 1] == known[1:]:
+            queue = known[:1] + q[:4]          # the queue moved on once more
         else:
             self.log(f"[coach] queue {''.join(q)} doesn't follow {''.join(known)} - trusting the screen")
             queue = q

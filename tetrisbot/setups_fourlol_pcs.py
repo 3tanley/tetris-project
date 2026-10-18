@@ -332,12 +332,15 @@ PATTERNS = {
     7: [
         ('100% Patterns: 1', 100.0, [
             'v115@ShRpAeR4wwDeRpR4ywLeAgH',
+            'v115@9gwhRph0R4wwhlwhRpg0R4ywglwhB8g0C8BtglwhG8?BtJeAgWVARY0vAQQ78AVQTABhgaMCs+jPCvAAAA',
         ]),
         ('100% Patterns: 2', 100.0, [
             'v115@ThR4wwFeR4ywzhJeAgWIANI98AQPcQB',
+            'v115@9gwhh0R4ywhlwhg0R4BtwwRpglwhg0C8BtRpglwhI8?JeAgWbARY0vAwno2AFrnRASoTABBoo2AJ9KWC6/1BA',
         ]),
         ('100% Patterns: 3', 100.0, [
             'v115@XhwwAeRpAezhywRpJeAgWIANI98AQPcQB',
+            'v115@9gwhh0AtR4hlRpwhg0BtywglRpwhg0AtR4wwA8glB8?whI8JeAg0HAJHExC6vzBA',
         ]),
         ('100% Patterns: 4', 100.0, [
             'v115@Mhg0CewwEei0xwEezhwwJeAgHMhAPCewhEeAPRaAew?hEexhAtwwwhJeAgHMhQpIeQpAehlFeQpwwglLeAgH',
@@ -349,6 +352,7 @@ PATTERNS = {
         ]),
         ('100% Patterns: 6', 100.0, [
             'v115@Rhg0EeglRpAei0AeilRpKeAgHXhAtRpEeSagWQpKeA?gH',
+            'v115@9gQ4hlywAtRpwhR4glh0BtRpwhA8Q4glg0wwAtC8wh?C8g0E8whJeAgH9gg0ilR4AtRpwhi0R4BtRpwhA8glywAtC8?whC8wwE8whJeAAA9gQ4Bti0glRpwhR4BtilRpwhA8Q4ywg0?C8whC8wwE8whJeAAA',
         ]),
         ('100% Patterns: 7', 100.0, [
             'v115@MhwwAeg0FexwAei0EewwzhJeAgHZhxSFexwhlJeAgH?OhgHAeg0FewwAPwSQpEewSBPRpJeAgH',
@@ -360,9 +364,11 @@ PATTERNS = {
         ]),
         ('100% Patterns: 9', 100.0, [
             'v115@EhwhGeQ4AewhGeR4whRpFeQ4whRpJeAgHEhwhIewhI?ewhRaGewhRaJeAgHEhgWAewhEeQaAegWAewhEeRaAtAeQaF?eQLBeQaJeAgHGhwwEewhCewwEexhAeAtwwFewwBtwwJeAgH',
+            'v115@9gwhili0A8RpwhQ4ywA8g0A8RpwhR4BtE8whglQ4ww?BtD8JeAgH9gwhQ4Bti0A8RpwhR4BtA8g0A8RpwhilwwE8wh?glQ4ywD8JeAAPFA0SltC6AAAA9gzhi0A8RpglQ4ywA8g0A8?RpglR4BtE8hlQ4wwBtD8JeAAPFA6yTxCpAAAA9gzhi0A8Rp?ywBtA8g0A8RpilR4E8glwwR4BtD8JeAAPFAzCOMC6AAAA9g?zhi0A8RpilBtA8g0A8RpywR4E8glwwR4BtD8JeAAPFAzO8L?C6AAAA',
         ]),
         ('100% Patterns: 10', 100.0, [
             'v115@DhBtIeBtGeR4wwFeR4ywJeAgHXhgWwSQaFehWAeRaJ?eAgH',
+            'v115@9gh0R4BtB8hlg0R4RpBtB8glg0wwzhC8glywRpE8Je?AgWHAU+TFDzvqBA9gQ4ywBtB8hlR4wwRpBtB8glg0Q4zhC8?gli0RpE8JeAAPHAK+TFDz+qBA9gzhBtB8hlh0ywBtB8glg0?RpwwR4C8glg0RpR4E8JeAAPHATn/VC6edBA',
         ]),
         ('100% Patterns: 11', 100.0, [
             'v115@JhglGeRpglBtEeRphlBtNeAgHJhQpIeQpxhGeRpxhN?eAAAJhwSGeRawSRaEehWBPRaNeAAAJhAtGexhAthlEehlBe?xSNeAAAJhQaGeQpglSaEeRpwwCtNeAAA',
@@ -374,20 +380,30 @@ PATTERNS = {
         ]),
         ('100% Patterns: 12', 100.0, [
             'v115@NhR4GeR4i0Eezhg0JeAgHNhwSQaGexSHeQpCeQLJeA?AtAAZhxSFexwhlJeAgWAAOhgWGeRagWwhQaEeQawSAPRaJe?AgHNhRaGeQpAeRawhEeRpAtxhJeAAPAA',
+            'v115@9gwwi0whilRpxwQ4g0whglB8RpBtR4whE8wwBtQ4wh?E8JeAgWHAauTxCvifBA',
+            'v115@9gBthlzhRpwwBtglh0B8RpxwR4g0E8wwR4glg0E8Je?AgWHAz/VWCvndBA',
+            'v115@9gBti0ilRpwwBtR4glB8RpxwR4g0E8wwzhE8JeAgWH?AJNegC6ifBA',
+            'v115@9gzhwwilRph0AtxwglB8Rpg0BtR4E8g0AtR4wwE8Je?AgWHAz3/wCvSdBA',
+            'v115@9gwhh0R4ilRpwhg0R4wwglB8RpwhBtxwE8whg0Btww?E8JeAgWHA6eNPCPNkBA',
         ]),
         ('100% Patterns: 13', 100.0, [
             'v115@FhxhHexhFewwAexhEeywxhJeAgHFhxwHexwHexwHex?wJeAAAFhxSHexSHexSHexSJeAAA',
+            'v115@9gzhBthlB8h0ywBtglB8g0RpwwR4A8glB8g0RpR4E8?JeAgWHATn/VC6edBA9gh0R4BthlB8g0R4RpBtglB8g0wwzh?A8glB8ywRpE8JeAAPHAU+TFDzvqBA9gQ4ywBthlB8R4wwRp?BtglB8g0Q4zhA8glB8i0RpE8JeAAPHAK+TFDz+qBA',
         ]),
         ('100% Patterns: 14', 100.0, [
             'v115@Qhh0FeR4j0CeR4h0JeAgHQhAPGeRLAPFehHRLJeAgH?QhQpGeSpFeDtJeAgH',
+            'v115@9gRpilywR4Rpglg0BtwwR4B8zhBtF8i0D8JeAgWHAa?entCvOkBA9gQ4zhBtywR4Rpg0glBtwwB8Q4Rpi0F8ilD8Je?AgWHAKnLuCU+jBA9gzhglywR4Btilh0R4B8BtRpg0wwF8Rp?g0D8JeAgWHAvfLuCsedBA9gRpBtzhR4Rpwwi0glR4B8ywil?F8Btg0D8JeAgWHAsuntCvndBA9gRpg0whQ4BtywRpg0whR4?BtwwB8h0whilF8whglQ4D8JeAgWHAMentCaH2BA',
         ]),
         ('100% Patterns: 15', 100.0, [
             'v115@FhxhHexhFeRpxhFeRpxhJeAgHFhxwHexwHexwHexwI?eg0AgH',
+            'v115@9gili0RpB8zhQ4g0RpB8glwwBtR4D8ywBtQ4D8JeAg?WHA6+bgCp/jBA9gili0RpB8glAtzhRpB8BtR4wwg0D8AtR4?ywD8JeAgWHAUtrgCpifBA9gywRpi0B8glBtRpR4g0B8glww?BtR4D8hlzhD8JeAgWHAJNUFDv/1BA9gwhh0R4AtRpB8whg0?R4BtRpB8whywAtglD8whg0wwilD8JeAgWHAM+dgC6vzBA9g?Q4BthlwhRpB8R4BtglwhRpB8g0Q4ywwhD8i0wwglwhD8JeA?gWHAK+dgCziDCA9gzhhlRpB8h0AtR4glRpB8g0BtywD8g0A?tR4wwglD8JeAgWHA03ntCMXdBA9gBtzhRpB8glBti0RpB8g?lywR4D8hlwwR4g0D8JeAgWHAzCmPCvndBA9gBtQ4ywRpB8h?0R4hlRpB8g0BtQ4wwglD8g0zhglD8JeAgWHApiHgCzX2BA9?gBtwwR4i0B8glBtzhg0B8glywRpD8hlR4RpD8JeAgWHAvSN?FDq+zBA',
         ]),
         ('100% Patterns: 16', 100.0, [
             'v115@FhxhHexhGeglxhEeilxhJeAgHFhxwHexwHexwHexwJ?eAgHFhxSHexSHexSHexSJeAgHYhAtRpEeSagWQpJeAgH',
+            'v115@9gwhh0R4glRpB8whg0R4wwglRpB8whBtxwhlC8whg0?BtwwE8JeAgWHA6e9VCK3zBA9gwhBthli0B8whwwBtglRpg0?B8whxwR4RpC8whwwR4glE8JeAgWHATX9wCs3fBA9gBti0gl?RpB8wwBtR4glRpB8xwR4g0hlC8wwzhE8JeAgWHAJNWWCv3f?BA9gwwi0whglRpB8xwQ4g0whglRpB8BtR4whhlC8wwBtQ4w?hE8JeAgWHAauTWCUnfBA9gwhilwwi0B8whglAtxwRpg0B8w?hBtR4RpC8whAtR4wwE8JeAgWHATnbMC0/jBA9gwwzhi0B8x?wBtglRpg0B8wwR4BtRpC8R4ilE8JeAgWHATnjxCsPdBA9gh?lwhRpR4AtB8wwglwhg0R4BtB8xwwhi0AtC8wwglwhRpE8Je?AgWHAK+lFDM9qBA9gzhwwglRpB8h0AtxwglRpB8g0BtR4hl?C8g0AtR4wwE8JeAgWHAz3/VCUXdBA9gwwR4AtwhglRpB8xw?BtwhglRpB8wwi0whhlC8R4Atg0whE8JeAgWHAp/LgC0H0BA?9gzhAtilB8wwRpBtglR4B8xwi0R4C8wwRpAtg0E8JeAgWHA?z/dgC6SdBA',
         ]),
         ('100% Patterns: 17', 100.0, [
+            'v115@IhwwCeg0EexwBeg0EewwBeh0zhJeAgWIANI98AQPcQ?B',
             'v115@9gwhBtywh0hlwhA8BtwwA8g0RpglwhB8R4A8g0Rpgl?whA8R4F8JeAg0HATXNPCsX2BADhAPwSwhAtFeAPBeAtFeAP?QaQpAtTeAg0HATe/VCvX2BA',
         ]),
         ('100% Patterns: 18', 100.0, [

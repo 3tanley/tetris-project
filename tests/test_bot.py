@@ -1591,3 +1591,112 @@ def test_advisor_shows_the_only_opener_switched_on():
         assert br._select_opener(core.Board(), None)[1].tmpl.family == "JAWS"
     finally:
         planner.configure(Handling())
+
+
+def _tuck_frames():
+    from PIL import Image
+    d = os.path.join(os.path.dirname(__file__), "data")
+    return [np.array(Image.open(os.path.join(d, f"tetrio_tuck_{i}.png")).convert("RGB")) for i in range(3)]
+
+
+class _Events:
+    def __init__(self):
+        self.locks = []
+
+    def begin(self, *a):
+        pass
+
+    def spawned(self, *a):
+        pass
+
+    def locked(self, before, piece, rot, x, y, used_hold, after, cleared):
+        self.locks.append((piece, used_hold))
+
+
+def test_watcher_explains_a_piece_tucked_under_the_last_one():
+    """2026-10-18 3:40 recording: J locked on the S, the Z spun in under it before the next
+    read. The topmost tetromino (the J) was taken for the falling piece, the Z didn't match
+    the T or J the watcher expected, and it re-read the game: the advisor dropped to free
+    play with no solve shown. With slow reads both can be down by the next read too."""
+    from tetrisbot.coach import Watcher
+    f0, f1, f2 = _tuck_frames()
+    geo = vision.locate(f0)
+    for frame, want in ((f1, [("J", True)]), (f2, [("J", True), ("Z", False)])):
+        ev, logs = _Events(), []
+        w = Watcher(ev, logs.append)
+        w.poll(f0, geo)
+        assert (w.cur, w.hold, "".join(w.queue)) == ("T", "J", "ZIOLS")
+        for _ in range(3 * Watcher.STABLE_FRAMES):
+            w.poll(frame, geo)
+        assert ev.locks == want, logs
+        assert not any("re-reading" in m for m in logs), logs
+
+
+def _pc_brain(hist, placed, cur, hold, hold_index):
+    from tetrisbot.brain import Brain
+    br = Brain(log=lambda m: None)
+    br.bag.history, br.bag.offset = list(hist), 0
+    br.placed, br.cur_index, br.hold_index = set(placed), cur, hold_index
+    return br
+
+
+def test_all_pc_builds_setup_and_solution_together_when_needed():
+    """2026-10-18 recording: after the 2nd PC, Z in hold, Z L J I S O next. Every 3rd PC
+    setup needs J and S kept out of the way until it is built - two pieces, one hold - so
+    none could be built and the advisor showed free play. A setup built together with its
+    solution (the early J / S go to their solution spots) is shown instead."""
+    from tetrisbot.handling import Handling
+    h = Handling()
+    h.openers, h.all_pc = "JAWS", True
+    planner.configure(h)
+    try:
+        # 3 bags; bag 3's Z (index 20) is in hold; bag 4 = Z L J I S O ...
+        br = _pc_brain("TJSIOLZ" * 3 + "ZLJISO", set(range(20)), 21, "Z", 20)
+        br.stage, br.advisor = "PC", True
+        step = br.decide(core.Board(), "Z", "Z", list("LJISO"))
+        assert br.stage == "PC2" and br.ts is not None and "+" in br.ts.tmpl.name, br.stage
+        assert step is not None and step.pl.piece == "Z"
+        # the build switches between the solutions on the same setup
+        from tetrisbot.brain import sibling_pool
+        assert br.ts.tmpl in sibling_pool(br.ts.tmpl) and len(sibling_pool(br.ts.tmpl)) > 1
+    finally:
+        planner.configure(Handling())
+
+
+def test_all_pc_never_goes_to_the_dpc():
+    """User, 2026-10-18: ALL PC loops the 1st-7th PC without DPCs. The advisor re-reading a
+    game left the bag position unknown: an empty field after the 8-line stage went to the
+    DPC; the coach also recognised DPC setups at the opener stage."""
+    from tetrisbot.brain import Brain
+    from tetrisbot.coach import Coach
+    from tetrisbot.handling import Handling
+    h = Handling()
+    h.openers, h.all_pc = "JAWS", True
+    planner.configure(h)
+    try:
+        br = Brain(log=lambda m: None)
+        br.stage = "PC8"                            # bag position unknown (offset None)
+        br.empty_field_stage(core.Board())
+        assert br.stage == "OPENER"
+        co = Coach(log=lambda m: None)
+        co.brain.stage = "OPENER"
+        assert not any(t.family == "DPC" for t in co._stage_pool())
+        # a real DPC spot (one piece of the bag over) with no Jaws build: no DPC either
+        br = _pc_brain("TJSIOLZ" * 2 + "OTJSZLI", set(range(13)), 14, "Z", 13)
+        br.stage = "OPENER"
+        best = br._select_opener(core.Board(), "Z")
+        assert best is None or best[1].tmpl.family != "DPC"
+    finally:
+        planner.configure(Handling())
+
+
+def test_seventh_pc_solutions_from_four_lol():
+    """four.lol's 7th PC page draws a solution under every 100% pattern; only a few had
+    been copied (the rest relied on the solver)."""
+    from collections import Counter
+    pats = Counter(t.label for t in templates.library()["pc2_pc"] if t.pc_no == 7)
+    for n in (1, 2, 3, 6, 9, 10, 12, 13, 14, 15, 16, 17):
+        assert pats[f"7th PC 100% Patterns: {n}"] >= 1, n
+    for t in templates.pc2_setups():
+        for m in templates.pc_full(t):
+            assert len(m.slots) == 10 and templates.TState.fresh_on(m, core.Board()) is not None, m.name

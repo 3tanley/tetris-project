@@ -498,9 +498,10 @@ class Brain:
             self.log(f"[opener] {T.FAMILY_NAMES[fam]}: build {p:.0%} x PC {T.PC_RATE[fam]:.1%}{why}")
             return fams[fam]
         # last resort: a DPC build from the empty field - only at a real DPC spot (one piece
-        # of the bag left over) and only setups for that extra piece
+        # of the bag left over) and only setups for that extra piece. Never in ALL PC: the
+        # user wants the 1st-7th PC loop without DPCs (2026-10-18)
         extra, _ = self.extra_piece()
-        return self._select(T.dpc(extra), board, hold, min_p) if extra else None
+        return self._select(T.dpc(extra), board, hold, min_p) if extra and not all_pc() else None
 
     # ------------------------------------------------------------ Jaws
     JAWS_FUTURES = 12
@@ -812,12 +813,13 @@ class Brain:
             self.log(f"[dpc] -> {best[1].tmpl.label} ({best[1].tmpl.name})")
         return best
 
-    def _select_pc_setup(self, board, hold):
+    def _select_pc_setup(self, board, hold, full=True):
         """four.lol setup for the next PC of the 4-line loop. Ranked by how many of the
         pieces left of the last bag it uses (four.lol draws each setup for those), then
         build chance x published PC chance. Setups may need up to 2 pieces not in view
         yet (the 5th PC's are 5-7 pieces); candidates are tried best-first and the search
-        stops once no later one can beat the best found."""
+        stops once no later one can beat the best found. If none can be built before its
+        solution (`full`, advisor): a setup built together with its solution (_select_pc_full)."""
         n = self.pc_n = self.pc_no()
         seq = self._seq()
         have = Counter(([hold] if hold else []) + seq)
@@ -841,7 +843,53 @@ class Brain:
             b = self._select([t], board, hold)
             if b and (best is None or (overlap, b[0][0] * rate) > best[0]):
                 best = ((overlap, b[0][0] * rate), b)
+        # advisor only: the player sees a solve instead of free play. When the bot plays,
+        # free play + the PC solver did better in simulation (338 vs 348 PCs in 28 games)
+        if best is None and full and self.advisor and board.rows[0] == 0:
+            return self._select_pc_full(board, hold, [t for _, _, t in cands])
         return best[1] if best else None
+
+    def _select_pc_full(self, board, hold, setups):
+        """No setup can be built before its solution (2026-10-18 recording: 3rd PC with Z
+        in hold, Z L J I S O next - J and S both come before the O and only one fits in
+        hold): build a setup and one of its solutions together, so a piece the setup
+        doesn't use goes straight to its solution spot. A setup's chance = share of
+        sampled futures in which any of its solutions can be finished; the build switches
+        between those solutions as pieces arrive (sibling_pool)."""
+        import time
+        seq = self._seq()
+        vis = Counter(([hold] if hold else []) + seq)
+        futures = self._jaws_futures(10)
+        lim = 600 if _hurry() else 3000
+        deadline = time.monotonic() + (0.3 if _hurry() else 1.5)
+        best = None
+        for t in setups:
+            if time.monotonic() > deadline:
+                break
+            # a 4-line PC from the empty field takes 10 pieces: every piece in view but
+            # (at most) the one left in hold goes into it
+            states = [T.TState(m) for m in T.pc_full(t) if sum((vis - Counter(m.types())).values()) <= 1]
+            if not states:
+                continue
+            wins, ok = Counter(), 0
+            for f in futures:
+                for ts in states:
+                    if planner.can_fill(board, ts.copy(), f, hold, node_limit=lim):
+                        wins[ts.tmpl.name] += 1
+                        ok += 1
+                        break
+            p = ok / len(futures)
+            if p == 0 or (best is not None and (p, t.pc_rate or 0.0) <= best[0]):
+                continue
+            ts = max(states, key=lambda s: wins[s.tmpl.name])
+            steps = planner.fill_template(board, ts, seq, hold, self._future())[2]
+            if steps:
+                best = ((p, t.pc_rate or 0.0), ts, steps)
+        if best is None:
+            return None
+        self.log(f"[pc{self.pc_n or ''}] no setup can be built before its solution; building "
+                 f"{best[1].tmpl.name} together ({best[0][0]:.0%})")
+        return ((best[0][0] * best[0][1], 0), best[1], best[2])
 
     def _select_pc8(self, board, hold):
         """8-line PC after the 2nd bag, from the family's known solutions (four.lol SD-PC,
@@ -1097,7 +1145,7 @@ class Brain:
             # four.lol's setup for the next PC of the loop: can one be built with the pieces
             # in view? (with the hold taken, often none can - 2026-10-18 recording: 2nd PC
             # left the extra J in hold, J next, and none of the 48 3rd PC setups fit)
-            best = br._select_pc_setup(core.Board(), hold)
+            best = br._select_pc_setup(core.Board(), hold, full=False)
             p = best[0][0] if best else 0.0
             return (2 if p >= 1 else 1, p, ""), \
                 f"{T.ORDINAL[PC_NO[n % 7]]} PC setup next ({p:.0%}), hold {hold or 'free'}"
@@ -1169,7 +1217,7 @@ class Brain:
         if self.stage in ("FREE", "PC8", "PCDPC", "PC") and board.rows[0] == 0 and not self.plan:
             n = self.unplaced_in_open_bag()
             if n < 0:
-                nxt = "DPC" if self.stage == "PC8" else "OPENER"
+                nxt = "DPC" if self.stage == "PC8" and not all_pc() else "OPENER"
             elif n % 7 == 0:
                 nxt = "OPENER"
             elif n == 1 and not all_pc():
@@ -1379,6 +1427,8 @@ def _plan_picture(board, steps, remaining, nxt=None):
 def sibling_pool(tmpl):
     """Templates of the same kind as `tmpl` (a setup can turn into any of its siblings
     that contains every piece placed so far)."""
+    if getattr(tmpl, "setup", None) is not None:
+        return T.pc_full(tmpl.setup)            # the other solutions on the same setup
     return T.library()[{"dpc": "dpc", "dpc_pc": "dpc_pc", "sdpc_pc": "sdpc_pc",
                         "pc8_pc": "jigsaw_pc", "pc1_pc": "jaws", "pc2": "pc2",
                         "pc2_pc": "pc2_pc"}.get(tmpl.stage, "wiki")]

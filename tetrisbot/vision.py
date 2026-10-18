@@ -438,6 +438,17 @@ def read_active(img, geo, sim_board=None, expect=None):
     """Find the falling piece: 4 same-coloured blocks forming a tetromino, not in
     `sim_board`. Looks at rows 0..22 (rows 20+ are drawn above the matrix).
     Prefers the `expect`ed piece type. Returns (piece, cells) or (None, None)."""
+    found = active_groups(img, geo, sim_board)
+    if not found:
+        return None, None
+    for p, grp in found:
+        if p == expect:
+            return p, grp
+    return found[0]
+
+
+def active_groups(img, geo, sim_board=None):
+    """Every tetromino of one colour not in `sim_board`, topmost first: [(piece, cells)]."""
     cells = {}
     for y in range(23):
         for x in range(core.W):
@@ -465,9 +476,4 @@ def read_active(img, geo, sim_board=None, expect=None):
                     stack.append(n)
         if len(grp) == 4 and core.identify(p, grp):
             found.append((p, tuple(sorted(grp))))
-    if not found:
-        return None, None
-    for p, grp in found:
-        if p == expect:
-            return p, grp
-    return found[0]
+    return found
