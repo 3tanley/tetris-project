@@ -12,9 +12,9 @@
     "semantic_hash": ""
   },
   "tests/test_bot.py": {
-    "mtime": 1792315121.6456726,
-    "seen": 1792315481.409151,
-    "ast_hash": "abf57b71519d551520f40452477480cf",
+    "mtime": 1792318533.44393,
+    "seen": 1792318902.200206,
+    "ast_hash": "337165dc7f0379b9334cfc2ea1bbf94e",
     "semantic_hash": ""
   },
   "tetrisbot/__init__.py": {
@@ -30,9 +30,9 @@
     "semantic_hash": ""
   },
   "tetrisbot/app.py": {
-    "mtime": 1791961334.076194,
-    "seen": 1791961344.091737,
-    "ast_hash": "ce163e740b35028c481d07b8ce7806cb",
+    "mtime": 1792317999.0945792,
+    "seen": 1792318902.200208,
+    "ast_hash": "69aaf94800db0ff122c9098586af0327",
     "semantic_hash": ""
   },
   "tetrisbot/brain.py": {
@@ -42,9 +42,9 @@
     "semantic_hash": ""
   },
   "tetrisbot/controller.py": {
-    "mtime": 1792313832.3615298,
-    "seen": 1792314644.724069,
-    "ast_hash": "bd39f22c746a61b43311d79464fe6da8",
+    "mtime": 1792318549.5213037,
+    "seen": 1792318902.2002099,
+    "ast_hash": "4d4845b3776da6671513ce140a57db20",
     "semantic_hash": ""
   },
   "tetrisbot/core.py": {
@@ -126,9 +126,9 @@
     "semantic_hash": ""
   },
   "tetrisbot/vision.py": {
-    "mtime": 1791573640.3717988,
-    "seen": 1791580157.7392461,
-    "ast_hash": "68cb9afb6e5811d396adc7dbe9562918",
+    "mtime": 1792318094.8737433,
+    "seen": 1792318902.200224,
+    "ast_hash": "0bb457764b022ada8538247c1d3007d9",
     "semantic_hash": ""
   },
   "CLAUDE.md": {
@@ -138,9 +138,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1792315480.085288,
-    "seen": 1792315481.4091709,
-    "ast_hash": "7ce9b6afec3a98d92af3dbe5606996f9",
+    "mtime": 1792318578.6618009,
+    "seen": 1792318902.200225,
+    "ast_hash": "16d7e6f9c180b339080e8f5537890f5e",
     "semantic_hash": ""
   },
   "requirements.txt": {
@@ -213,6 +213,18 @@
     "mtime": 1792311708.7501414,
     "seen": 1792314644.7240782,
     "ast_hash": "acbda8e9ea4c2299f337385b7c6a5710",
+    "semantic_hash": ""
+  },
+  "tests/data/tetrio_ready.png": {
+    "mtime": 1792318521.3052356,
+    "seen": 1792318902.20023,
+    "ast_hash": "e408fe1fc2d970522481a5df255a5a56",
+    "semantic_hash": ""
+  },
+  "tests/data/tetrio_zen.png": {
+    "mtime": 1792318016.5783107,
+    "seen": 1792318902.20023,
+    "ast_hash": "dcd982d416f112530b35107264320f55",
     "semantic_hash": ""
   }
 }

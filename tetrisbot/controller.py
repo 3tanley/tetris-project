@@ -231,7 +231,7 @@ class Bot:
         self.geo = geo
         self.box = geo.bounds()
         x0, y0 = self.box[0], self.box[1]
-        self.lgeo = vision.Geometry(geo.left - x0, geo.top - y0, geo.cw, geo.ch)  # geometry inside a grab
+        self.lgeo = geo.at(x0, y0)            # geometry inside a grab
         return True
 
     def _grab(self):
@@ -372,6 +372,7 @@ class Bot:
                 if self.stop_event.is_set():
                     return
                 self._press(k)
+            t_keys = time.time()
             # 2. plan the next piece now (on copies), assuming this one lands as planned.
             #    This overlaps with the screen lag, so the next piece's keys can go out
             #    the instant this one is hard dropped. A new setup / PC choice waits for
@@ -380,6 +381,9 @@ class Bot:
             # 3. look at the screen
             self.resynced = False
             res, actual, fresh_q = self._confirm(step, cur, queue)
+            if res in ("unknown", "wrong") and self._new_game_on_screen(queue):
+                self.log("[game] TETR.IO restarted (empty field, nothing falling) - waiting for the next game")
+                return
             if fresh_q:                          # screen queue -> this piece's full queue
                 queue = ([queue[0]] + fresh_q) if (step.hold and self.hold is None) else fresh_q
                 ncur_f, nqueue_f, _, _ = _advance(cur, queue, self.hold, step)
@@ -439,6 +443,10 @@ class Bot:
                     res, actual = "locked", cells2
             if res != "locked":
                 self._press(core.HARD)
+            waited = time.time() - t_keys
+            if waited > 0.3:
+                self.log(f"[slow] {step.pl.piece}: {waited * 1000:.0f} ms from its last key to the hard drop"
+                         + (" (it locked by itself)" if res == "locked" else ""))
             self.t_spawn = time.time()
             self.pieces += 1
             if plan_after:
@@ -499,8 +507,12 @@ class Bot:
             pc_due = nbrain.pc_check_due(nb, nhold)
         choosing = not self.sprint() and nbrain.ts is None and not nbrain.plan and (
             nbrain.stage != "FREE" or (0 < nb.height() <= 6 and not planner.SETTINGS["safe"]))
-        if (choosing or pc_due) and not final:
-            out["deferred"], out["after_drop"] = True, pc_due
+        # a soft-dropped (tucked / spun) piece rests on the stack with its lock delay running:
+        # hard drop it first, plan after (at high gravity every piece soft drops: keep the
+        # pipelining there, _lock_imminent guards it)
+        resting = core.SOFT in step.keys() and not planner.SETTINGS["safe"]
+        if (choosing or pc_due or resting) and not final:
+            out["deferred"], out["after_drop"] = True, pc_due or resting
             return out
         out["step"] = self._decide(nbrain, nb, ncur, nhold, nqueue) if ncur else None
         out["mode"] = (planner.SETTINGS["safe"], planner._air_ms(nb))
@@ -682,9 +694,11 @@ class Bot:
             p, act = vision.read_active(img, self.lgeo, self.board, piece)
             q = vision.read_queue(img, self.lgeo)
             act = set(act or ())
-            # already locked by itself? (next piece falling, queue moved on)
-            if len(q) == 5 and ncur and p == ncur and q[:min(4, len(after) - 1)] == after[1:5] and (
-                    p != piece or not act or not (act & target)):
+            # already locked by itself? The queue moved on, so the next piece has spawned.
+            # Never judge by the falling piece: a piece that locked right on the target looks
+            # just like it resting there (2026-10-18 recording: a tucked L locked while the
+            # next piece was planned, read as "on target", and space slammed the Z)
+            if len(q) == 5 and ncur and q[:min(4, len(after) - 1)] == after[1:5]:
                 cells = self._autolock_cells(img, piece)
                 est = now - self.lag - self.t_last_key
                 if est >= 0.1:                  # shorter readings are just screen lag
@@ -793,11 +807,11 @@ class Bot:
             img = self._grab()
             p, act = vision.read_active(img, self.lgeo, self.board, piece)
             q = vision.read_queue(img, self.lgeo)
-            if p == piece and act:
-                return "ok", None
-            if ncur and p == ncur and len(q) == 5 and q[:min(4, len(after) - 1)] == after[1:5]:
+            if ncur and len(q) == 5 and q[:min(4, len(after) - 1)] == after[1:5]:
                 self.log(f"[check] {piece} locked by itself while planning - not hard dropping")
                 return "locked", self._autolock_cells(img, piece)
+            if p == piece and act:
+                return "ok", None
             if time.time() > t_end:
                 return "ok", None
             time.sleep(0.004)
@@ -839,6 +853,26 @@ class Bot:
             if best is None or sc > best[0]:
                 best = (sc, pl)
         return best[1] if best else None
+
+    def _new_game_on_screen(self, queue):
+        """TETR.IO restarted under the bot (2026-10-18 recording: the bot began playing from
+        the last frames of the previous game, then kept the old pieces through READY / SET /
+        GO and lost track): no piece falling, an empty matrix, and either blocks in the model
+        or a queue that isn't the expected one."""
+        for look in range(2):                  # two looks: a line-clear flash is not a restart
+            if look:
+                self._wait(150)
+            img = self._grab()
+            p, _ = vision.read_active(img, self.lgeo, None)
+            if p is not None:
+                return False
+            vb, _, _ = vision.read_board_ex(img, self.lgeo)
+            if vb.rows[0] != 0:
+                return False
+            q = vision.read_queue(img, self.lgeo)
+            if not (self.board.rows[0] != 0 or (len(q) == 5 and q != list(queue)[1:6] and q != list(queue)[:5])):
+                return False
+        return True
 
     def _autolock_cells(self, img, piece):
         """Where a piece locked by itself: the 4 new blocks on screen, if they form it."""

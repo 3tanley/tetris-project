@@ -1,4 +1,5 @@
 """Overlay window (Start/Stop + live stats) and the Cmd+Shift+K hotkey."""
+import os
 import time
 
 import AppKit
@@ -426,6 +427,25 @@ class Overlay(NSObject):
             self.bagview.setNeedsDisplay_(True)
 
 
+LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs")
+
+
+def file_logger():
+    """print + logs/bot.log with millisecond times (the previous run is kept as bot.1.log),
+    so a screen recording can be lined up with what the bot thought."""
+    os.makedirs(LOG_DIR, exist_ok=True)
+    path = os.path.join(LOG_DIR, "bot.log")
+    if os.path.exists(path):
+        os.replace(path, os.path.join(LOG_DIR, "bot.1.log"))
+    f = open(path, "w", buffering=1)
+
+    def log(msg):
+        print(msg)
+        t = time.time()
+        f.write(f"{time.strftime('%H:%M:%S', time.localtime(t))}.{int(t * 1000) % 1000:03d} {msg}\n")
+    return log
+
+
 def run(config=None, overlay=True, handling=None, autoplay=False):
     app = AppKit.NSApplication.sharedApplication()
     app.setActivationPolicy_(AppKit.NSApplicationActivationPolicyAccessory)
@@ -435,7 +455,7 @@ def run(config=None, overlay=True, handling=None, autoplay=False):
     if not screen_access_ok(prompt=True):
         print("! Grant Screen Recording permission (System Settings > Privacy & Security > "
               "Screen & System Audio Recording), then restart, or the board can't be seen.")
-    bot = Bot(config, handling=handling)
+    bot = Bot(config, log=file_logger(), handling=handling)
     bot.autoplay = autoplay
     keep = []
     if overlay:

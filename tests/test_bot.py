@@ -1477,3 +1477,60 @@ def test_jaws_build_rate_over_every_bag_order():
         assert count(True) == 2880
     finally:
         planner.configure(Handling())
+
+
+def test_zen_queue_is_read_inside_its_panel():
+    """2026-10-18 recording: in Zen the NEXT panel sits against the matrix and is narrower, with
+    the page's dark grey right behind it; the queue read as empty (that grey looked like pieces)
+    and the bot waited for a game start forever."""
+    from PIL import Image
+    im = np.array(Image.open(os.path.join(os.path.dirname(__file__), "data", "tetrio_zen.png")).convert("RGB"))
+    geo = vision.locate(im)
+    assert vision.read_queue(im, geo) == ["L", "J", "Z", "I", "S"]
+    assert vision.read_active(im, geo, None)[0] == "T"
+    # 40 LINES / Blitz layout keeps its box
+    im = np.array(Image.open(os.path.join(os.path.dirname(__file__), "data", "tetrio_board.png")).convert("RGB"))
+    assert vision.read_queue(im, vision.locate(im)) == ["T", "O", "Z", "L", "J"]
+
+
+def test_tucked_piece_that_locks_while_planning_is_not_slammed(monkeypatch):
+    """2026-10-18 recording: a tucked L rested on the stack while the next piece was planned
+    (slowly), locked by itself right on its target, was read as "on target", and space slammed
+    the next piece; every later key went to the wrong piece. Soft-dropped pieces are now hard
+    dropped before planning, and a queue that moved on always means the piece locked."""
+    import tetrisbot.brain as brain_mod
+    orig = brain_mod.Brain.decide
+
+    def slow(self, *a, **k):
+        time.sleep(0.6)
+        return orig(self, *a, **k)
+
+    monkeypatch.setattr(brain_mod.Brain, "decide", slow)
+    fake, bot, logs = _run_fake(limit=30, seed=7, latency_ms=60, timed_keys=True, lock_always=True,
+                                prevent_hd_ms=0)
+    assert fake.pieces >= fake.limit, logs[-10:]
+    assert fake.slammed == 0, [m for m in logs if "[check]" in m]
+
+
+def test_restart_is_noticed():
+    """2026-10-18 recording: the bot started from the last frames of the previous game and
+    kept that game's pieces through TETR.IO's READY / SET / GO. A READY screen (empty field,
+    nothing falling, a different queue) now ends the bot's game; a normal frame doesn't."""
+    from PIL import Image
+    from tetrisbot.controller import Bot
+
+    def bot_on(name):
+        im = np.array(Image.open(os.path.join(os.path.dirname(__file__), "data", name)).convert("RGB"))
+        bot = Bot(log=lambda m: None)
+        bot.lookahead.close()
+        bot.lgeo = vision.locate(im)
+        bot._grab = lambda: im
+        return bot
+
+    bot = bot_on("tetrio_ready.png")
+    bot.board = core.Board.from_strings(["....T.....", "...TTT...."])
+    assert bot._new_game_on_screen(list("TIJSZL"))           # old game's pieces in the model
+    bot.board = core.Board()
+    assert bot._new_game_on_screen(list("TIJSZL"))           # empty model, but another queue
+    assert not bot._new_game_on_screen(list("OITZLS"))       # the queue it expects: not a restart
+    assert not bot_on("tetrio_live.png")._new_game_on_screen(list("IJTISL"))   # a piece is falling

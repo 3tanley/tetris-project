@@ -62,7 +62,17 @@ It can be dragged anywhere. Clicking it does not take keyboard focus away from t
      only watches and shows the setup being built and where the next piece should go. No
      keys are pressed. See [Advisor](#advisor-bot-plays-off).
    * **BOT PLAYS on**: the bot plays.
-3. Press **⌘⇧K** again (or Stop) to stop it. When a game ends it waits for the next one.
+3. Press **⌘⇧K** again (or Stop) to stop it. When TETR.IO restarts the game (READY / SET /
+   GO: an empty field with nothing falling and a new queue) it drops the old game and waits
+   for the next first piece.
+
+Blitz, 40 LINES and Zen all work. Zen draws the NEXT panel against the field and narrower,
+so the queue is read inside the panel's white frame wherever it is.
+
+Everything the bot logs also goes to `logs/bot.log`, with millisecond times (the previous
+run is kept as `logs/bot.1.log`). With a screen recording of a problem, that file shows
+what the bot thought at each moment. A piece that waited more than 0.3 s between its last
+key and the hard drop is logged as `[slow]`.
 
 Flipping BOT PLAYS while running switches right away: the session restarts in the new mode
 and joins the game in progress (free play until the field is empty, then the loop).
@@ -381,7 +391,10 @@ From the [Hard Drop wiki](https://harddrop.com/wiki/Jigsaw_PC_Loop) (`tetrisbot/
 * **Failsafes instead of blind hard drops:**
   * **Already locked:** if the piece locked by itself (the next piece is already falling),
     it doesn't hard drop. That would slam the next piece down. It records where the piece
-    actually locked.
+    actually locked. "Locked" is decided by the queue moving on, never by the piece alone:
+    a piece that locked right on its target looks the same as one resting there.
+  * **Tucks drop first:** a piece placed with a soft drop (tuck or spin) rests on the stack
+    with its lock delay running, so it is hard dropped before the next piece is planned.
   * **Off target:** at most one correction. If the planned spot can't be reached in time,
     it places the piece in the best spot reachable from where it really is, and the plan
     adapts.

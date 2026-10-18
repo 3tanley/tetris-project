@@ -46,8 +46,9 @@ def classify_color(rgb):
 class Geometry:
     """Board location in image pixels: matrix origin (left, top) and cell size."""
 
-    def __init__(self, left, top, cw, ch):
+    def __init__(self, left, top, cw, ch, next_x=(10.95, 15.7)):
         self.left, self.top, self.cw, self.ch = float(left), float(top), float(cw), float(ch)
+        self.next_x = next_x            # inside of the NEXT panel, in cells from `left`
 
     def __repr__(self):
         return f"Geometry(left={self.left:.1f}, top={self.top:.1f}, cell={self.cw:.2f}x{self.ch:.2f})"
@@ -57,7 +58,11 @@ class Geometry:
         return self.left + (x + 0.5) * self.cw, self.top + (19.5 - y) * self.ch
 
     def scaled(self, s, dx=0, dy=0):
-        return Geometry(self.left * s + dx, self.top * s + dy, self.cw * s, self.ch * s)
+        return Geometry(self.left * s + dx, self.top * s + dy, self.cw * s, self.ch * s, self.next_x)
+
+    def at(self, x0, y0):
+        """The same geometry inside a grab whose top-left pixel is (x0, y0)."""
+        return Geometry(self.left - x0, self.top - y0, self.cw, self.ch, self.next_x)
 
     def bounds(self):
         """Pixel box covering hold, matrix (+3 rows above) and next queue."""
@@ -69,8 +74,8 @@ class Geometry:
                 self.left - 0.25 * self.cw, self.top + 3.7 * self.ch)
 
     def next_box(self):
-        return (self.left + 10.95 * self.cw, self.top + 0.85 * self.ch,
-                self.left + 15.7 * self.cw, self.top + 15.45 * self.ch)
+        return (self.left + self.next_x[0] * self.cw, self.top + 0.85 * self.ch,
+                self.left + self.next_x[1] * self.cw, self.top + 15.45 * self.ch)
 
 
 # ------------------------------------------------------------------ locating
@@ -144,38 +149,33 @@ def locate(img):
     while bl > top and white[bl, (left + right) // 2]:
         bl -= 1
     bottom = bl + 1
-    return Geometry(left, top, (right - left) / 10.0, (bottom - top) / 20.0)
+    geo = Geometry(left, top, (right - left) / 10.0, (bottom - top) / 20.0)
+    geo.next_x = _next_panel(white, geo)
+    return geo
 
 
-def _locate_left_only(white, segs):
-    """Fallback when the right border is not white (it glows during some effects):
-    a vertical line 20 rows tall whose bottom joins a white line ~10 cells long."""
-    best = None
-    for a in segs:
-        la = a[3] - a[2]
-        y = a[3] - 1
-        row = white[max(0, y - 3): y + 2, a[1] + 1:]
-        if row.size == 0:
-            continue
-        run = 0
-        for v in row.any(axis=0):
-            if not v:
-                break
-            run += 1
-        ratio = run / la
-        if 0.45 < ratio < 0.56 and (best is None or abs(ratio - 0.5) < best[0]):
-            best = (abs(ratio - 0.5), a, run)
-    if best is None:
-        return None
-    _, a, run = best
-    left = a[1] + 1
-    top, bottom = a[2], a[3]
-    bl = bottom - 1
-    while bl > top and white[bl, left + run // 2]:
-        bl -= 1
-    bottom = bl + 1
-    ch = (bottom - top) / 20.0
-    return Geometry(left, top, ch, ch)   # TETR.IO cells are square
+def _next_panel(white, geo):
+    """Inside of the NEXT panel (cells from the matrix's left edge) from its white frame.
+    40 LINES / Blitz draw it apart from the matrix (borders at ~10.8 and ~15.9 cells); Zen
+    draws it against the matrix and narrower (right border at ~15.1), with the dark grey
+    page right behind it - reading past the border sees that grey as pieces. Two rows
+    between the preview pieces (below the white NEXT title) must agree."""
+    found = []
+    x0, x1 = int(geo.left + 10.2 * geo.cw), int(geo.left + 17.5 * geo.cw)
+    for fy in (2.0, 5.0):
+        y = int(geo.top + fy * geo.ch)
+        if not 0 <= y < white.shape[0] or x0 < 0 or x1 > white.shape[1]:
+            return 10.95, 15.7
+        xs = np.flatnonzero(white[y, x0:x1])
+        cells = (x0 + xs - geo.left) / geo.cw
+        right = cells[cells >= 13.0]
+        left = cells[cells < 12.0]
+        found.append((round(float(left.max()), 1) if left.size else None,
+                      round(float(right.min()), 1) if right.size else None))
+    if found[0] != found[1] or found[0][1] is None:
+        return 10.95, 15.7
+    lo, hi = found[0]
+    return max(10.15, lo + 0.1) if lo is not None else 10.15, min(15.7, hi - 0.1)
 
 
 # ------------------------------------------------------------------- reading

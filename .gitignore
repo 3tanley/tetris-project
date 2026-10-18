@@ -13,3 +13,5 @@ graphify-out/cache/
 .claude/
 # per-install settings (handling, controls, openers), written by the Handling window
 settings.json
+# the bot's run logs (logs/bot.log, bot.1.log)
+logs/
