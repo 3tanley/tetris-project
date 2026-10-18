@@ -570,21 +570,33 @@ class Brain:
 
     def _jaws_build_sides(self, hold):
         """Which Jaws orientations (False = I L S Z on the left, True = mirrored) this bag can
-        build while every other piece waits in hold (one at a time) - so no piece has to go
-        into a solve before the queue shows which solve works."""
+        build bottom-up while every other piece waits in hold (one at a time) - so no piece
+        has to go into a solve before the queue shows which solve works (8.7% of bags).
+        ALL PC (the user's choice, 2026-10-18): tucks allowed, and one piece may go straight
+        to its spot in a solve whose other pieces under it are build pieces (57% of bags;
+        in simulation about 1 such start in 7 missed its PC)."""
         seq = self._seq()[:7]
+        loose = all_pc()
         out = set()
         for mirrored in (False, True):
-            t = next(x for x in T.openers(["JAWS"]) if x.mirrored == mirrored)
+            tm = [x for x in T.openers(["JAWS"]) if x.mirrored == mirrored]
+            t = tm[0]
             hard, soft = T.dependencies(t)
             build = {sid: t.slots[sid].ptype for sid in t.slots if sid.startswith("b")}
-            need = {sid: (hard[sid] | soft[sid]) & set(build) for sid in build}
+            need = {sid: (hard[sid] if loose else hard[sid] | soft[sid]) & set(build) for sid in build}
+            early = set()               # (type, build slots it sits on) of solve pieces that can go first
+            if loose:
+                for x in tm:
+                    xh, xs = T.dependencies(x)
+                    for sid, sl in x.slots.items():
+                        if not sid.startswith("b") and not ((xh[sid] | xs[sid]) - set(build)):
+                            early.add((sl.ptype, frozenset(xh[sid] | xs[sid])))
             memo = {}
 
-            def ok(i, h, placed):
+            def ok(i, h, placed, spent=False):
                 if len(placed) == len(build):
                     return True
-                key = (i, h, placed)
+                key = (i, h, placed, spent)
                 if key in memo:
                     return memo[key]
                 r = False
@@ -592,9 +604,10 @@ class Brain:
                     def put(p, ni, nh):
                         for sid, bt in build.items():
                             if bt == p and sid not in placed and need[sid] <= placed:
-                                if ok(ni, nh, placed | {sid}):
+                                if ok(ni, nh, placed | {sid}, spent):
                                     return True
-                        return False
+                        return not spent and p not in build.values() and any(
+                            et == p and on <= placed for et, on in early) and ok(ni, nh, placed, True)
                     cur = seq[i]
                     r = put(cur, i + 1, h)
                     if not r and h is not None and h != cur:

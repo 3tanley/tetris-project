@@ -288,7 +288,8 @@ other opener on (or Jaws off) turns ALL PC off.
   the pieces of the oldest bag not placed yet say where the loop is (0 → 1st, 4 → 2nd,
   1 → 3rd, 5 → 4th, 2 → 5th, 6 → 6th, 3 → 7th). After any perfect clear (an 8-line one, or
   one found in free play) the loop carries on from there.
-* **1st PC:** Jaws when the bag allows it (see below); otherwise the Jigsaw bag-1 build,
+* **1st PC:** Jaws when the bag allows it (see below; ALL PC builds it more loosely);
+  otherwise the Jigsaw bag-1 build,
   which leads to a 4-line PC as soon as the pieces in view finish one (or to Jigsaw's sure
   8-line PC).
 * **2nd–7th PC:** among four.lol's setups for that PC (with mirrors) whose pieces are on
@@ -299,8 +300,8 @@ other opener on (or Jaws off) turns ALL PC off.
 * **Ending a PC:** when several ways to finish a PC are found, the one that leaves the
   hold empty. A leftover piece stuck in hold is the usual reason no setup fits the next PC.
 * **Simulation** (150 pieces per game, 28 games): 18 games had 10 or more PCs in a row (up
-  to 15, all that 150 pieces allow); 12 of 347 PCs needed more than 8 lines (free play
-  after no setup fit). Not tested on real TETR.IO yet.
+  to 16); 13 of 346 PCs needed more than 8 lines (free play after no setup fit). Not tested
+  on real TETR.IO yet.
 
 ### Perfect clear first
 
@@ -336,6 +337,11 @@ From [four.lol ILSZ](https://four.lol/perfect-clears/ILSZ) and
   Otherwise O, T or J would have to go into a solution before the queue shows which
   solution works, and the build fails often (in simulation about 40% of the time). That
   is about 1 bag in 11 (440 of 5040 orders); other bags use another opener.
+* **With ALL PC on:** looser, for more Jaws starts: the build may use tucks, and one other
+  piece may go straight to its spot in a solution (one that only sits on build pieces,
+  e.g. the O on the far right). That is 42.86% of bag orders per side, 57.14% (2880 of
+  5040) with the mirror. In simulation about 1 such start in 7 missed its 1st PC; the
+  ALL PC streaks stayed the same.
 * **2nd PC:** every four.lol 2nd PC setup whose pieces are on hand is considered (exact
   leftover match and higher PC chance first); then the PC solution that the next pieces can
   build. The one piece left over goes into the DPC (ALL PC: the 3rd PC).

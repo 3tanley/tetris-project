@@ -1451,3 +1451,29 @@ def test_all_pc_keeps_clearing():
     finally:
         planner.configure(Handling())
     assert ends == list(range(10, 101, 10)), ends      # 10 PCs in a row, every 10 pieces
+
+
+def test_jaws_build_rate_over_every_bag_order():
+    """Jaws starts on 440 of the 5040 bag orders (bottom-up, the rest waits in hold); with
+    ALL PC on (user, 2026-10-18: tucks + one piece early into a solve) on 2880 = 57.14%."""
+    from itertools import permutations
+    from tetrisbot.brain import Brain
+    from tetrisbot.handling import Handling
+
+    def count(all_pc):
+        h = Handling()
+        h.all_pc = all_pc
+        planner.configure(h)
+        br = Brain(log=lambda m: None)
+        br.bag.reset(aligned=True)
+        n = 0
+        for perm in permutations("IJLOSTZ"):
+            br.bag.history = list(perm)
+            n += bool(br._jaws_build_sides(None))
+        return n
+
+    try:
+        assert count(False) == 440
+        assert count(True) == 2880
+    finally:
+        planner.configure(Handling())
