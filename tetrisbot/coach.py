@@ -135,6 +135,7 @@ class Coach(Events):
         self.lookahead = lookahead
         self.prior = prior if prior is not None else SetupPrior.load()
         self.brain = Brain(log=log, lookahead=lookahead)
+        self.brain.advisor = True
         self.spawn = None          # (current, hold, queue) when the piece in play spawned
         self.rec = None            # the suggested Step for the piece in play
         self.suggested = 0         # pieces with a suggestion
@@ -148,6 +149,7 @@ class Coach(Events):
         if self.lookahead is not None:
             self.lookahead.reset()
         self.brain = Brain(log=self.log, lookahead=self.lookahead)
+        self.brain.advisor = True
         self.brain.bag.reset(aligned=fresh)
         if not fresh:
             self.brain.stage = "FREE"

@@ -1534,3 +1534,35 @@ def test_restart_is_noticed():
     assert bot._new_game_on_screen(list("TIJSZL"))           # empty model, but another queue
     assert not bot._new_game_on_screen(list("OITZLS"))       # the queue it expects: not a restart
     assert not bot_on("tetrio_live.png")._new_game_on_screen(list("IJTISL"))   # a piece is falling
+
+
+def test_40_lines_number_behind_the_field_reads_as_empty():
+    """2026-10-18 recording 2: 40 LINES draws the lines-left number in dim grey behind the
+    matrix. Those cells read as unreadable, the advisor waits for a fully readable field
+    before it follows a game, so it showed "waiting for a game" all game long."""
+    from PIL import Image
+    from tetrisbot.coach import Coach, Watcher
+    im = np.array(Image.open(os.path.join(os.path.dirname(__file__), "data", "tetrio_40l.png")).convert("RGB"))
+    geo = vision.locate(im)
+    board, _, unknown = vision.read_board_ex(im, geo)
+    assert not unknown
+    assert board.rows[0] == 0b1101 and board.rows[1] == 0b11001      # I standing at x 0, S at x 2-4
+    w = Watcher(Coach(log=lambda m: None), log=lambda m: None)
+    w.poll(im, geo)
+    assert w.model is not None                                         # following the game
+    # no board in view: None (the fallback search had gone missing and raised NameError)
+    assert vision.locate(np.zeros((200, 200, 3), np.uint8)) is None
+
+
+def test_advisor_shows_the_only_opener_switched_on():
+    """User, 2026-10-18: with one opener on (ALL PC = Jaws only) the advisor shows that one,
+    also for bags where the bot itself falls back to another opener."""
+    from tetrisbot.handling import Handling
+    try:
+        br = _opener_brain("OTJSZLI", "JAWS")
+        assert br._select_opener(core.Board(), None)[1].tmpl.family != "JAWS"     # bot: failsafe
+        br = _opener_brain("OTJSZLI", "JAWS")
+        br.advisor = True
+        assert br._select_opener(core.Board(), None)[1].tmpl.family == "JAWS"
+    finally:
+        planner.configure(Handling())

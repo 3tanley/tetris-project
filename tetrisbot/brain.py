@@ -288,6 +288,8 @@ def _lookahead_job(br0, board, hold, steps):
 
 
 class Brain:
+    advisor = False        # set by the Coach: suggestions for the player, the bot doesn't play
+
     def __init__(self, log=print, lookahead=None):
         self.log = log
         self.bag = BagTracker()
@@ -450,15 +452,19 @@ class Brain:
         user's priority order that is certain to be built with these pieces.
         None certain: the one with the best chance of a perfect clear = chance to build it
         x the published PC chance of what follows (templates.PC_RATE); failsafe: the
-        switched-off openers may be used too. Last resort: a DPC build from the empty field."""
+        switched-off openers may be used too - not by the advisor when only one opener is
+        switched on: the player builds that one (user's choice, 2026-10-18; when the bot
+        plays, the failsafe stays: forcing Jaws on every bag cut ALL PC runs of 10+ PCs
+        from 17 to 9 of 28 games). Last resort: a DPC build from the empty field."""
         order = opener_priority()
+        single = self.advisor and len(order) == 1
         enabled = set(order)
         fams = {}
 
         def consider(families):
             for fam in families:
                 if fam == "JAWS":
-                    best = self._select_jaws(board, hold, min_p)
+                    best = self._select_jaws(board, hold, min_p, force=single)
                 else:
                     best = self._select(T.openers([fam]), board, hold, min_p)
                 if best:
@@ -479,7 +485,7 @@ class Brain:
             self.log(f"[opener] {T.FAMILY_NAMES[first]}: build {fams[first][0][0]:.0%} x PC "
                      f"{T.PC_RATE[first]:.1%} (priority {n} of {len(order)})")
             return fams[first]
-        if not any(sure(f) for f in mine):
+        if not any(sure(f) for f in mine) and not single:
             # failsafe: only now look at the openers that are switched off
             # (ALL PC: only Jigsaw - its build leads to a 4-line 1st PC, or a sure 8-line one)
             consider([f for f in T.FAMILY_PRIORITY if f not in enabled and (not all_pc() or f == "JIGSAW")])
@@ -537,11 +543,12 @@ class Brain:
                     break
         return counts, union / len(futures)
 
-    def _select_jaws(self, board, hold, min_p=0.0):
+    def _select_jaws(self, board, hold, min_p=0.0, force=False):
         """Jaws as a family: 100% because SOME of its 22 solutions fits whatever bag 2 brings.
         Its chance = share of sampled futures where at least one solution can be built;
         the template to start = the one that works in the most futures (then the best
-        2nd PC chance for the pieces it leaves)."""
+        2nd PC chance for the pieces it leaves). `force` (Jaws is the only opener on): also
+        bags that can't build I L S Z without a piece going into a solve first."""
         # Jaws is only available at a fresh bag with an empty hold: a carried piece or a
         # half-used bag forces pieces into solve spots before the bag shows which solve
         # works (in simulation 0 of 4 clean starts failed, 14 of 24 other starts did)
@@ -550,7 +557,7 @@ class Brain:
         if _hurry() and (self.lookahead is None or not self.lookahead.is_warm(T.openers(["JAWS"]))):
             # high gravity and Jaws not precomputed yet: choosing it would take ~1 s here
             return None
-        sides = self._jaws_build_sides(hold)
+        sides = self._jaws_build_sides(hold) or ({False, True} if force else None)
         if not sides:
             return None                     # this bag can't build I L S Z without committing
         states = [ts for ts in (T.TState.fresh_on(t, board) for t in T.openers(["JAWS"]))

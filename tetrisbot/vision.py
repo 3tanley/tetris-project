@@ -154,6 +154,37 @@ def locate(img):
     return geo
 
 
+def _locate_left_only(white, segs):
+    """Fallback when the right border is not white (it glows during some effects):
+    a vertical line 20 rows tall whose bottom joins a white line ~10 cells long."""
+    best = None
+    for a in segs:
+        la = a[3] - a[2]
+        y = a[3] - 1
+        row = white[max(0, y - 3): y + 2, a[1] + 1:]
+        if row.size == 0:
+            continue
+        run = 0
+        for v in row.any(axis=0):
+            if not v:
+                break
+            run += 1
+        ratio = run / la
+        if 0.45 < ratio < 0.56 and (best is None or abs(ratio - 0.5) < best[0]):
+            best = (abs(ratio - 0.5), a, run)
+    if best is None:
+        return None
+    _, a, run = best
+    left = a[1] + 1
+    top, bottom = a[2], a[3]
+    bl = bottom - 1
+    while bl > top and white[bl, left + run // 2]:
+        bl -= 1
+    bottom = bl + 1
+    ch = (bottom - top) / 20.0
+    return Geometry(left, top, ch, ch)   # TETR.IO cells are square
+
+
 def _next_panel(white, geo):
     """Inside of the NEXT panel (cells from the matrix's left edge) from its white frame.
     40 LINES / Blitz draw it apart from the matrix (borders at ~10.8 and ~15.9 cells); Zen
@@ -218,7 +249,8 @@ def cell_state(img, geo, x, y):
     cells only partly or with gradients, so it reads as 'unknown', never as a block.
     """
     centre = cell_color(img, geo, x, y)
-    if not is_filled(centre):
+    # dim grey = the lines-left number 40 LINES draws behind the matrix (~(42, 45, 47))
+    if not is_filled(centre) or (centre.max() < 70 and np.ptp(centre) < 15):
         return "empty", centre
     px0 = geo.left + x * geo.cw
     py0 = geo.top + (19 - y) * geo.ch
