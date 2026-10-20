@@ -762,6 +762,7 @@ def test_warm_up_covers_the_sz_dpc_and_stops_for_a_job():
         for sol in templates.solutions_after(t):
             assert order.index(sol) < first_other
     la._job = ("sig", lambda: None)                # a job is waiting: warm-up yields
+    nap, planner.WARM_NAP = planner.WARM_NAP, 0    # no other thread to yield to here
     n0 = len(planner._GEN_CACHE)
     planner._GEN_CACHE.clear()
     assert la.warm_step() is True and la._warm_todo[0] is order[0]
@@ -771,7 +772,32 @@ def test_warm_up_covers_the_sz_dpc_and_stops_for_a_job():
     n = len(planner._GEN_CACHE)
     for t in sz:
         planner.warm_template(t)
+    planner.WARM_NAP = nap
     assert len(planner._GEN_CACHE) == n            # nothing left to compute for them
+
+
+def test_warm_up_does_not_starve_the_bot_thread():
+    # 2026-10-19 log: [slow] 300-900 ms on every piece for the ~53 s the warm-up ran - each
+    # screen look waited for the GIL behind it (13 ms per look alone, ~600 ms with it)
+    import threading
+    from PIL import Image
+    from tetrisbot.brain import warm_order
+    im = np.array(Image.open(os.path.join(os.path.dirname(__file__), "data", "tetrio_live.png")).convert("RGB"))
+    geo = vision.locate(im)
+    planner._GEN_CACHE.clear()
+    stop = threading.Event()
+    th = threading.Thread(target=lambda: [planner.warm_template(t, stop.is_set) for t in warm_order()])
+    th.start()
+    time.sleep(0.05)
+    t = time.time()
+    for _ in range(5):                             # what _confirm does per look
+        vision.read_active(im, geo, None)
+        vision.read_queue(im, geo)
+        time.sleep(0.005)
+    took = (time.time() - t) / 5
+    stop.set()
+    th.join()
+    assert took < 0.08, f"{took * 1000:.0f} ms per screen look while warming up"
 
 
 def _recording_2320(check):

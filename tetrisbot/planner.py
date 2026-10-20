@@ -197,6 +197,11 @@ def order_feasible(tmpl, remaining, hard, seq, hold, locked_first=False):
 
 
 # ------------------------------------------------------------------ warm-up
+# hand the GIL back between move generations: without this nap each screen look on the bot
+# thread waited ~600 ms behind the warm-up (13 ms alone) for the ~53 s it ran
+WARM_NAP = 0.001
+
+
 def warm_signature():
     """Settings that change move generation: when they change, warmed results are stale."""
     return (SETTINGS["safe"], SETTINGS["handling"].signature(), _air_ms(core.Board()), _gravity_step(),
@@ -220,6 +225,7 @@ def warm_template(tmpl, stop=lambda: False):
                 continue
             if stop():
                 return False
+            time.sleep(WARM_NAP)
             pl = movegen(b, tmpl.slots[sid].ptype).get(ts.slot_cells(sid))
             if pl is None:
                 continue
